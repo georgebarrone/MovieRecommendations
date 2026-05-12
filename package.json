@@ -1,0 +1,13 @@
+{
+  "name": "movie-recommendations",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A simple Gemini-powered movie recommendation chat website.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

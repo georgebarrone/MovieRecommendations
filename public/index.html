@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Need a Rec?</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="poster-wall" id="poster-wall" aria-hidden="true"></div>
+
+    <main class="theater-shell">
+      <section class="marquee" aria-label="Need a Rec marquee">
+        <div class="marquee-caps" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        <div class="marquee-face">
+          <div class="marquee-fold marquee-fold-left" aria-hidden="true"></div>
+          <div class="marquee-center">
+            <div class="marquee-lines" aria-hidden="true"></div>
+            <h1>Need a Rec?</h1>
+          </div>
+          <div class="marquee-fold marquee-fold-right" aria-hidden="true"></div>
+        </div>
+
+        <div class="marquee-light-row" aria-hidden="true"></div>
+      </section>
+
+      <div class="stage-stack">
+        <section class="mood-section" aria-labelledby="mood-title">
+          <h2 id="mood-title">What's your movie mood?</h2>
+
+          <div class="poster-grid" id="poster-grid" aria-live="polite"></div>
+
+          <button class="pick-search-button" id="pick-search-button" type="button">
+            Search related suggestions
+          </button>
+          <!-- TODO: Wire this button to a related-movie recommendation API. -->
+
+          <p class="tmdb-credit">
+            This product uses the TMDB API but is not endorsed or certified by TMDB.
+          </p>
+        </section>
+
+        <section class="genre-section" aria-labelledby="genre-title">
+          <h2 id="genre-title">Search by genre or actor</h2>
+          <form class="genre-actor-form" id="genre-actor-form">
+            <label class="sr-only" for="genre-actor-input">Genre or actor</label>
+            <input
+              id="genre-actor-input"
+              name="genreActor"
+              type="search"
+              autocomplete="off"
+              placeholder="Try neo-noir, Florence Pugh, road trip..."
+            >
+            <button type="submit">Search</button>
+          </form>
+          <!-- TODO: Wire genre and actor search to the future non-Gemini movie APIs. -->
+        </section>
+
+        <section class="chat-panel" aria-labelledby="chat-title">
+          <header class="chat-header">
+            <h2 id="chat-title">Chat with us</h2>
+            <span class="status-pill" id="status-pill">Ready</span>
+          </header>
+
+          <div class="messages" id="messages" aria-live="polite">
+            <article class="message message-bot">
+              <div class="avatar">M</div>
+              <div class="bubble">
+                <p>What kind of movie would you like tonight?</p>
+              </div>
+            </article>
+          </div>
+
+          <form class="composer" id="chat-form">
+            <label class="sr-only" for="message-input">Movie request</label>
+            <textarea
+              id="message-input"
+              name="message"
+              rows="2"
+              placeholder="I want a smart sci-fi thriller under two hours..."
+              required
+            ></textarea>
+            <button type="submit">Send</button>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <div class="movie-search-modal" id="movie-search-modal" hidden>
+      <section
+        class="movie-search-popover"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="movie-search-title"
+      >
+        <div class="movie-search-topline">
+          <h2 id="movie-search-title">Pick a movie</h2>
+          <button
+            class="movie-search-close"
+            id="movie-search-close"
+            type="button"
+            aria-label="Close movie search"
+          >x</button>
+        </div>
+
+        <div class="movie-search">
+          <label for="movie-search-input">Movie title</label>
+          <div class="search-box">
+            <input
+              id="movie-search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Start typing..."
+              aria-autocomplete="list"
+              aria-controls="movie-results"
+              aria-expanded="false"
+            >
+            <ul class="movie-results" id="movie-results" role="listbox" hidden></ul>
+          </div>
+          <p class="search-status" id="movie-search-status" role="status"></p>
+        </div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
