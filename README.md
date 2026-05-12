@@ -1,6 +1,10 @@
 # MovieRecommendations
 In need of a movie suggestion? Come here
 
+## Work in Progress
+
+This project is a work in progress. The core movie recommendation experience is in place, but the design, features, and recommendation flow are still being refined.
+
 ## Setup
 
 This is a tiny Gemini-powered movie recommendation chat site with TMDB movie search.
