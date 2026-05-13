@@ -38,9 +38,8 @@
           <div class="poster-grid" id="poster-grid" aria-live="polite"></div>
 
           <button class="pick-search-button" id="pick-search-button" type="button">
-            Search related suggestions
+            Search based on picks
           </button>
-          <!-- TODO: Wire this button to a related-movie recommendation API. -->
 
           <p class="tmdb-credit">
             This product uses the TMDB API but is not endorsed or certified by TMDB.
@@ -60,7 +59,6 @@
             >
             <button type="submit">Search</button>
           </form>
-          <!-- TODO: Wire genre and actor search to the future non-Gemini movie APIs. -->
         </section>
 
         <section class="chat-panel" aria-labelledby="chat-title">
@@ -126,6 +124,28 @@
           </div>
           <p class="search-status" id="movie-search-status" role="status"></p>
         </div>
+      </section>
+    </div>
+
+    <div class="related-results-modal" id="related-results-modal" hidden>
+      <section
+        class="related-results-popover"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="related-results-title"
+      >
+        <div class="related-results-topline">
+          <h2 id="related-results-title">Movie matches</h2>
+          <button
+            class="related-results-close"
+            id="related-results-close"
+            type="button"
+            aria-label="Close movie matches"
+          >x</button>
+        </div>
+
+        <p class="related-results-status" id="related-results-status" role="status"></p>
+        <div class="related-results-grid" id="related-results-grid"></div>
       </section>
     </div>
 
