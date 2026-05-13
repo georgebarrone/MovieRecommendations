@@ -58,7 +58,15 @@ Keep `.env` private and do not commit real API keys.
 
 The full app cannot currently run on GitHub Pages by itself because GitHub Pages only serves static files, and this project needs the Node server for API routes and private API keys.
 
-GitHub Pages could host a static-only preview of the front end, but chat, poster search, genre search, and API-backed poster loading would not work unless the API routes move to a separate backend or serverless function host.
+This `pages-demo` branch includes a static-only preview in `docs/` for GitHub Pages. It does not call Gemini, TMDB search, or the local Node API. Instead, it uses hard-coded sample data:
+
+- Two preselected poster picks.
+- A sample chat back-and-forth.
+- Static chat responses for demo prompts.
+- Static movie-title search results for the poster picker.
+- Static genre/actor examples such as `sci-fi`, `mystery`, `Ana de Armas`, and `Ryan Gosling`.
+
+To publish it with GitHub Pages, set the Pages source to this branch and select `/docs` as the folder.
 
 ## Work in progress
 
