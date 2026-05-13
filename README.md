@@ -4,6 +4,14 @@ Need a movie suggestion? Come here.
 
 MovieRecommendations is a work-in-progress movie recommendation web app. It currently runs as a small Node.js server that serves the front end and proxies API requests to Gemini and TMDB.
 
+## Demo
+
+A static demo with hard-coded example posters, chat messages, and genre/actor searches is available on GitHub Pages:
+
+https://georgebarrone.github.io/MovieRecommendations/
+
+The demo is hosted from the `pages-demo` branch and does not call Gemini, TMDB search, or the local Node API.
+
 ## Current state
 
 The core recommendation experience is in place, but the site is still being refined. The current build includes:
@@ -58,13 +66,13 @@ Keep `.env` private and do not commit real API keys.
 
 The full app cannot currently run on GitHub Pages by itself because GitHub Pages only serves static files, and this project needs the Node server for API routes and private API keys.
 
-GitHub Pages could host a static-only preview of the front end, but chat, poster search, genre search, and API-backed poster loading would not work unless the API routes move to a separate backend or serverless function host.
+The GitHub Pages demo uses hard-coded examples so visitors can try the front-end flow without requiring API keys or a running backend. The live chat, poster search, genre search, and API-backed poster loading still require the Node server unless those routes move to a separate backend or serverless function host.
 
 ## Work in progress
 
 Next likely improvements:
 
 - Add production hosting on a platform that can run Node or serverless functions.
-- Add a GitHub Pages/static preview only if a nonfunctional demo is useful.
+- Connect the public demo to live API-backed recommendations once production hosting is available.
 - Improve loading, empty, and error states around API-backed search.
 - Add automated tests for route handlers and UI behavior.
