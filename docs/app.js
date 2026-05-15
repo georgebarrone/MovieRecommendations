@@ -19,109 +19,51 @@ const relatedResultsTitle = document.querySelector("#related-results-title");
 const relatedResultsStatus = document.querySelector("#related-results-status");
 const relatedResultsGrid = document.querySelector("#related-results-grid");
 
-const demoMovies = [
+const fallbackWallPosters = [
   {
-    id: 603,
     title: "The Matrix",
-    year: "1999",
-    posterUrl: "https://image.tmdb.org/t/p/w342/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg",
-    overview: "A hacker discovers that reality is a simulation and joins a rebellion against its controllers.",
-    keywords: ["sci-fi", "action", "cyberpunk", "keanu reeves"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg"
   },
   {
-    id: 27205,
     title: "Inception",
-    year: "2010",
-    posterUrl: "https://image.tmdb.org/t/p/w342/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg",
-    overview: "A thief who steals secrets through dreams takes one last job that bends time and memory.",
-    keywords: ["sci-fi", "thriller", "mind-bending"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg"
   },
   {
-    id: 157336,
     title: "Interstellar",
-    year: "2014",
-    posterUrl: "https://image.tmdb.org/t/p/w342/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg",
-    overview: "Explorers travel through a wormhole to find humanity a new home.",
-    keywords: ["sci-fi", "space", "christopher nolan"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg"
   },
   {
-    id: 329865,
     title: "Arrival",
-    year: "2016",
-    posterUrl: "https://image.tmdb.org/t/p/w342/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg",
-    overview: "A linguist works to understand alien visitors before panic turns into war.",
-    keywords: ["sci-fi", "thoughtful", "amy adams"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg"
   },
   {
-    id: 496243,
     title: "Parasite",
-    year: "2019",
-    posterUrl: "https://image.tmdb.org/t/p/w342/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg",
-    overview: "A struggling family infiltrates a wealthy household with sharp, escalating consequences.",
-    keywords: ["thriller", "dark comedy", "mystery"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg"
   },
   {
-    id: 546554,
     title: "Knives Out",
-    year: "2019",
-    posterUrl: "https://image.tmdb.org/t/p/w342/pThyQovXQrw2m0s9x82twj48Jq4.jpg",
-    overview: "A detective investigates a family full of motives after a famous novelist dies.",
-    keywords: ["mystery", "comedy", "ana de armas", "whodunit"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/pThyQovXQrw2m0s9x82twj48Jq4.jpg"
   },
   {
-    id: 313369,
     title: "La La Land",
-    year: "2016",
-    posterUrl: "https://image.tmdb.org/t/p/w342/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg",
-    overview: "A pianist and an actor fall in love while chasing creative ambition in Los Angeles.",
-    keywords: ["romance", "musical", "ryan gosling"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg"
   },
   {
-    id: 120467,
     title: "The Grand Budapest Hotel",
-    year: "2014",
-    posterUrl: "https://image.tmdb.org/t/p/w342/eWdyYQreja6JGCzqHWXpWHDrrPo.jpg",
-    overview: "A concierge and lobby boy tumble through a bright, precise comic caper.",
-    keywords: ["comedy", "adventure", "stylized"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/eWdyYQreja6JGCzqHWXpWHDrrPo.jpg"
   },
   {
-    id: 335984,
     title: "Blade Runner 2049",
-    year: "2017",
-    posterUrl: "https://image.tmdb.org/t/p/w342/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg",
-    overview: "A replicant hunter uncovers a buried secret that could reshape the future.",
-    keywords: ["sci-fi", "neo-noir", "ryan gosling", "ana de armas"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg"
   },
   {
-    id: 244786,
     title: "Whiplash",
-    year: "2014",
-    posterUrl: "https://image.tmdb.org/t/p/w342/7fn624j5lj3xTme2SgiLCeuedmO.jpg",
-    overview: "A young drummer enters a punishing mentorship with a ruthless jazz instructor.",
-    keywords: ["drama", "music", "intense"]
+    posterUrl: "https://image.tmdb.org/t/p/w342/7fn624j5lj3xTme2SgiLCeuedmO.jpg"
   }
 ];
 
-const demoOpeningMessages = [
-  {
-    role: "user",
-    text: "I want something clever and tense, but still fun."
-  },
-  {
-    role: "model",
-    text: "Start with Knives Out. It keeps the mystery moving, has a sharp comic edge, and still gives you a satisfying detective-story payoff."
-  },
-  {
-    role: "user",
-    text: "What if I want something more thoughtful after that?"
-  },
-  {
-    role: "model",
-    text: "Then make it a double feature with Arrival. It has the same puzzle-box pleasure, but trades the jokes for emotion and big sci-fi ideas."
-  }
-];
-
-const selectedMovies = [findDemoMovie(329865), findDemoMovie(546554), null, null];
+const conversation = [];
+const selectedMovies = Array(4).fill(null);
 const POSTER_WALL_TARGET_COLUMN_WIDTH = 74;
 const POSTER_WALL_MIN_COLUMNS = 7;
 const POSTER_WALL_MAX_COLUMNS = 48;
@@ -132,13 +74,14 @@ let activeSlotIndex = -1;
 let searchResults = [];
 let highlightedResult = -1;
 let searchTimer = null;
+let searchController = null;
 let isChatLoading = false;
 let isRelatedLoading = false;
 let currentPosterWallPosters = [];
 let posterWallResizeFrame = 0;
 let posterWallLayoutKey = "";
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const text = input.value.trim();
@@ -185,7 +128,7 @@ movieSearchInput.addEventListener("input", () => {
 
   searchTimer = window.setTimeout(() => {
     searchMovies(query);
-  }, 120);
+  }, 220);
 });
 
 movieSearchInput.addEventListener("keydown", (event) => {
@@ -283,10 +226,8 @@ genreActorForm.addEventListener("submit", (event) => {
   searchRelatedMovies(text);
 });
 
-statusPill.textContent = "Demo";
 renderPosterSlots();
-loadDemoConversation();
-renderPosterWall(demoMovies);
+loadPosterWall();
 
 if (posterWall) {
   window.addEventListener("resize", schedulePosterWallRender);
@@ -296,151 +237,111 @@ if (posterWall) {
   }
 }
 
-function sendChatMessage(text) {
+async function sendChatMessage(text) {
   if (isChatLoading) {
     return;
   }
 
   addMessage("user", text);
+  conversation.push({ role: "user", text });
   setLoading(true);
 
-  window.setTimeout(() => {
-    addMessage("model", getDemoReply(text));
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: conversation,
+        favoriteMovies: getFavoriteMoviePayload()
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "The movie assistant had trouble replying.");
+    }
+
+    addMessage("model", data.reply);
+    conversation.push({ role: "model", text: data.reply });
+  } catch (error) {
+    addMessage("model", `Sorry, I hit an error: ${error.message}`);
+  } finally {
     setLoading(false);
     input.focus();
-  }, 360);
+  }
 }
 
-function getDemoReply(text) {
-  const normalizedText = text.toLowerCase();
-  const picks = selectedMovies.filter(Boolean);
-
-  if (normalizedText.includes("based on my picks") && picks.length) {
-    return `Based on ${picks.map((movie) => movie.title).join(" and ")}, try Blade Runner 2049 for moody sci-fi mystery or Parasite for a tense, twisty story with a dark sense of humor.`;
-  }
-
-  if (normalizedText.includes("funny") || normalizedText.includes("comedy")) {
-    return "For a lighter recommendation, try The Grand Budapest Hotel. It is fast, stylish, and playful without losing momentum.";
-  }
-
-  if (
-    normalizedText.includes("sci-fi") ||
-    normalizedText.includes("space") ||
-    normalizedText.includes("future")
-  ) {
-    return "Arrival is the thoughtful pick, The Matrix is the high-energy pick, and Blade Runner 2049 is the moodier slow-burn pick.";
-  }
-
-  if (normalizedText.includes("mystery") || normalizedText.includes("detective")) {
-    return "Knives Out is the crowd-pleaser here. If you want the mystery to feel heavier and stranger, follow it with Parasite.";
-  }
-
-  return "For this static demo, I would steer you toward Knives Out if you want fun, Arrival if you want feeling, or Blade Runner 2049 if you want atmosphere.";
-}
-
-function loadDemoConversation() {
-  demoOpeningMessages.forEach((message) => {
-    addMessage(message.role, message.text);
-  });
-}
-
-function searchRelatedMovies(query) {
+async function searchRelatedMovies(query) {
   if (isRelatedLoading) {
     return;
   }
 
   openRelatedResults();
   setRelatedLoading(true);
-  relatedResultsTitle.textContent = "Searching demo matches";
-  relatedResultsStatus.textContent = "Finding static example results...";
+  relatedResultsTitle.textContent = "Searching TMDB";
+  relatedResultsStatus.textContent = "Finding three English-language matches...";
   relatedResultsGrid.replaceChildren();
 
-  window.setTimeout(() => {
-    renderRelatedResults(getDemoRelatedResults(query));
+  try {
+    const response = await fetch(
+      `/api/movies/related?query=${encodeURIComponent(query)}`
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "TMDB search failed.");
+    }
+
+    renderRelatedResults(data);
+  } catch (error) {
+    relatedResultsTitle.textContent = "No matches";
+    relatedResultsStatus.textContent = error.message;
+    relatedResultsGrid.replaceChildren();
+  } finally {
     setRelatedLoading(false);
-  }, 220);
+  }
 }
 
-function getDemoRelatedResults(query) {
-  const normalizedQuery = query.toLowerCase();
-
-  if (normalizedQuery.includes("ana") || normalizedQuery.includes("armas")) {
-    return {
-      query,
-      matchName: "Ana de Armas",
-      matchType: "actor",
-      results: [findDemoMovie(546554), findDemoMovie(335984)]
-    };
-  }
-
-  if (normalizedQuery.includes("ryan") || normalizedQuery.includes("gosling")) {
-    return {
-      query,
-      matchName: "Ryan Gosling",
-      matchType: "actor",
-      results: [findDemoMovie(313369), findDemoMovie(335984)]
-    };
-  }
-
-  if (
-    normalizedQuery.includes("sci") ||
-    normalizedQuery.includes("space") ||
-    normalizedQuery.includes("future")
-  ) {
-    return {
-      query,
-      matchName: "sci-fi",
-      matchType: "genre",
-      results: [findDemoMovie(329865), findDemoMovie(603), findDemoMovie(335984)]
-    };
-  }
-
-  if (normalizedQuery.includes("mystery") || normalizedQuery.includes("whodunit")) {
-    return {
-      query,
-      matchName: "mystery",
-      matchType: "genre",
-      results: [findDemoMovie(546554), findDemoMovie(496243)]
-    };
-  }
-
-  return {
-    query,
-    matchName: query,
-    matchType: "genre",
-    results: [findDemoMovie(329865), findDemoMovie(546554), findDemoMovie(335984)]
-  };
-}
-
-function searchMovies(query) {
+async function searchMovies(query) {
   if (activeSlotIndex === -1 || selectedMovies[activeSlotIndex]) {
     setMovieStatus("Pick an empty poster slot first.");
     closeResults();
     return;
   }
 
-  const normalizedQuery = query.toLowerCase();
+  if (searchController) {
+    searchController.abort();
+  }
 
-  searchResults = demoMovies
-    .filter((movie) => {
-      const searchableText = [
-        movie.title,
-        movie.year,
-        movie.overview,
-        ...movie.keywords
-      ].join(" ").toLowerCase();
+  searchController = new AbortController();
+  setMovieStatus("Searching...");
 
-      return searchableText.includes(normalizedQuery);
-    })
-    .slice(0, 6);
+  try {
+    const response = await fetch(
+      `/api/movies/search?query=${encodeURIComponent(query)}`,
+      { signal: searchController.signal }
+    );
+    const data = await response.json();
 
-  highlightedResult = searchResults.length ? 0 : -1;
-  setMovieStatus(
-    searchResults.length
-      ? "Static demo results"
-      : "No static demo matches. Try Arrival, Matrix, mystery, or sci-fi."
-  );
-  renderResults();
+    if (!response.ok) {
+      throw new Error(data.error || "TMDB search failed.");
+    }
+
+    searchResults = data.results || [];
+    highlightedResult = searchResults.length ? 0 : -1;
+    setMovieStatus(searchResults.length ? "" : "No matches found.");
+    renderResults();
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return;
+    }
+
+    searchResults = [];
+    highlightedResult = -1;
+    closeResults();
+    setMovieStatus(error.message);
+  }
 }
 
 function renderResults() {
@@ -465,20 +366,24 @@ function renderResults() {
     const poster = document.createElement("div");
     poster.className = "result-poster";
 
-    const image = document.createElement("img");
-    image.src = movie.posterUrl;
-    image.alt = "";
-    image.loading = "lazy";
-    poster.append(image);
+    if (movie.posterUrl) {
+      const image = document.createElement("img");
+      image.src = movie.posterUrl;
+      image.alt = "";
+      image.loading = "lazy";
+      poster.append(image);
+    } else {
+      poster.textContent = "No art";
+    }
 
     const details = document.createElement("span");
     details.className = "result-copy";
 
     const title = document.createElement("strong");
-    title.textContent = `${movie.title} (${movie.year})`;
+    title.textContent = movie.year ? `${movie.title} (${movie.year})` : movie.title;
 
     const overview = document.createElement("span");
-    overview.textContent = movie.overview;
+    overview.textContent = movie.overview || "Movie result from TMDB";
 
     details.append(title, overview);
     button.append(poster, details);
@@ -548,11 +453,18 @@ function renderPosterSlots() {
     const frame = document.createElement("div");
     frame.className = "poster-frame";
 
-    const image = document.createElement("img");
-    image.src = movie.posterUrl;
-    image.alt = `${movie.title} poster`;
-    image.loading = "lazy";
-    frame.append(image);
+    if (movie.posterUrl) {
+      const image = document.createElement("img");
+      image.src = movie.posterUrl;
+      image.alt = `${movie.title} poster`;
+      image.loading = "lazy";
+      frame.append(image);
+    } else {
+      const missing = document.createElement("div");
+      missing.className = "poster-missing";
+      missing.textContent = movie.title;
+      frame.append(missing);
+    }
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
@@ -566,7 +478,7 @@ function renderPosterSlots() {
     title.textContent = movie.title;
 
     const meta = document.createElement("p");
-    meta.textContent = movie.year;
+    meta.textContent = movie.year || "Year unknown";
 
     slot.append(frame, title, meta);
     posterGrid.append(slot);
@@ -577,7 +489,7 @@ function openMoviePicker(slotIndex) {
   activeSlotIndex = slotIndex;
   movieSearchTitle.textContent = `Pick a movie for slot ${slotIndex + 1}`;
   movieSearchInput.value = "";
-  setMovieStatus("Try Arrival, Matrix, Blade Runner, mystery, or sci-fi.");
+  setMovieStatus("");
   closeResults();
   movieSearchModal.hidden = false;
   document.body.classList.add("search-open");
@@ -585,6 +497,10 @@ function openMoviePicker(slotIndex) {
 }
 
 function closeMoviePicker() {
+  if (searchController) {
+    searchController.abort();
+  }
+
   movieSearchModal.hidden = true;
   document.body.classList.remove("search-open");
   movieSearchInput.value = "";
@@ -593,12 +509,31 @@ function closeMoviePicker() {
   activeSlotIndex = -1;
 }
 
+async function loadPosterWall() {
+  if (!posterWall) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/movies/poster-wall");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Could not load poster wall.");
+    }
+
+    renderPosterWall(data.posters || fallbackWallPosters);
+  } catch (error) {
+    renderPosterWall(fallbackWallPosters);
+  }
+}
+
 function renderPosterWall(posters) {
   const usablePosters = (Array.isArray(posters) ? posters : []).filter(
     (poster) => poster.posterUrl
   );
 
-  if (!posterWall || !usablePosters.length) {
+  if (!usablePosters.length) {
     return;
   }
 
@@ -748,19 +683,20 @@ function createPosterWallTile(poster, index) {
 }
 
 function renderRelatedResults(data) {
-  const movies = Array.isArray(data.results) ? data.results.filter(Boolean) : [];
+  const movies = Array.isArray(data.results) ? data.results : [];
   const matchName = data.matchName || data.query || "that search";
 
   relatedResultsTitle.textContent = `Matches for ${matchName}`;
   relatedResultsGrid.replaceChildren();
 
   if (!movies.length) {
-    relatedResultsStatus.textContent = "No static demo matches found.";
+    relatedResultsStatus.textContent = "No English-language movie matches found.";
     return;
   }
 
-  relatedResultsStatus.textContent =
-    data.matchType === "actor" ? "Actor match" : "Genre match";
+  relatedResultsStatus.textContent = data.matchType === "actor"
+    ? "Actor match"
+    : "Genre match";
 
   movies.forEach((movie) => {
     const card = document.createElement("article");
@@ -769,20 +705,24 @@ function renderRelatedResults(data) {
     const poster = document.createElement("div");
     poster.className = "related-movie-poster";
 
-    const image = document.createElement("img");
-    image.src = movie.posterUrl;
-    image.alt = `${movie.title} poster`;
-    image.loading = "lazy";
-    poster.append(image);
+    if (movie.posterUrl) {
+      const image = document.createElement("img");
+      image.src = movie.posterUrl;
+      image.alt = `${movie.title} poster`;
+      image.loading = "lazy";
+      poster.append(image);
+    } else {
+      poster.textContent = "No art";
+    }
 
     const copy = document.createElement("div");
     copy.className = "related-movie-copy";
 
     const title = document.createElement("h3");
-    title.textContent = `${movie.title} (${movie.year})`;
+    title.textContent = movie.year ? `${movie.title} (${movie.year})` : movie.title;
 
     const overview = document.createElement("p");
-    overview.textContent = movie.overview;
+    overview.textContent = movie.overview || "No synopsis available.";
 
     copy.append(title, overview);
     card.append(poster, copy);
@@ -816,8 +756,16 @@ function setMovieStatus(text) {
   movieSearchStatus.textContent = text;
 }
 
+function getFavoriteMoviePayload() {
+  return selectedMovies.filter(Boolean).map((movie) => ({
+    id: movie.id,
+    title: movie.title,
+    year: movie.year
+  }));
+}
+
 function formatMovieTitle(movie) {
-  return `${movie.title} (${movie.year})`;
+  return movie.year ? `${movie.title} (${movie.year})` : movie.title;
 }
 
 function addMessage(role, text) {
@@ -842,15 +790,11 @@ function setLoading(isLoading) {
   input.disabled = isLoading;
   form.querySelector("button").disabled = isLoading;
   pickSearchButton.disabled = isLoading;
-  statusPill.textContent = isLoading ? "Thinking" : "Demo";
+  statusPill.textContent = isLoading ? "Thinking" : "Ready";
 }
 
 function setRelatedLoading(isLoading) {
   isRelatedLoading = isLoading;
   genreActorInput.disabled = isLoading;
   genreActorForm.querySelector("button").disabled = isLoading;
-}
-
-function findDemoMovie(id) {
-  return demoMovies.find((movie) => movie.id === id);
 }
