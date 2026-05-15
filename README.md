@@ -16,13 +16,13 @@ The demo is hosted from the `pages-demo` branch and does not call Gemini, TMDB s
 
 The core recommendation experience is in place, but the site is still being refined. The current build includes:
 
-- A theater-style "Need a Rec?" landing experience with a moving TMDB poster wall.
+- A **film strip-themed** theater-style "Need a Rec?" landing experience with perforated edges, a moving TMDB poster wall, and classic cinema aesthetics.
 - Four favorite-movie poster slots powered by TMDB title search.
 - A "Search based on picks" flow that sends selected movies to the Gemini movie assistant.
 - A freeform chat assistant for movie recommendations by mood, genre, era, runtime, actor, language, or taste.
 - A genre-or-actor search box that returns three English-language TMDB movie matches.
 - TMDB poster fallbacks so the background still works if TMDB credentials are missing.
-- Local Limelight and Courier Prime font files for the current visual style.
+- Local Limelight and Courier Prime font files for the current vintage cinema visual style.
 
 ## Tech stack
 

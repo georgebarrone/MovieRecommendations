@@ -69,6 +69,10 @@ const POSTER_WALL_MIN_COLUMNS = 7;
 const POSTER_WALL_MAX_COLUMNS = 48;
 const POSTER_WALL_MIN_ROWS = 10;
 const POSTER_WALL_MAX_ROWS = 22;
+const POSTER_WALL_EXTRA_ROWS = 3;
+const POSTER_WALL_BASE_SPEED = 8.5;
+const POSTER_WALL_SPEED_VARIANCE = 4;
+const POSTER_WALL_MAX_FRAME_DELTA = 0.05;
 
 let activeSlotIndex = -1;
 let searchResults = [];
@@ -80,6 +84,9 @@ let isRelatedLoading = false;
 let currentPosterWallPosters = [];
 let posterWallResizeFrame = 0;
 let posterWallLayoutKey = "";
+let posterWallColumns = [];
+let posterWallAnimationFrame = 0;
+let posterWallLastTimestamp = 0;
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -529,9 +536,7 @@ async function loadPosterWall() {
 }
 
 function renderPosterWall(posters) {
-  const usablePosters = (Array.isArray(posters) ? posters : []).filter(
-    (poster) => poster.posterUrl
-  );
+  const usablePosters = getUniquePosterWallPosters(posters);
 
   if (!usablePosters.length) {
     return;
@@ -539,8 +544,8 @@ function renderPosterWall(posters) {
 
   currentPosterWallPosters = usablePosters;
 
-  const { columnCount, rowsPerColumn } = getPosterWallLayout();
-  const layoutKey = `${columnCount}:${rowsPerColumn}`;
+  const { columnCount, rowsPerColumn, posterStride } = getPosterWallLayout();
+  const layoutKey = `${columnCount}:${rowsPerColumn}:${Math.round(posterStride)}`;
 
   if (layoutKey === posterWallLayoutKey && posterWall.children.length) {
     return;
@@ -548,7 +553,11 @@ function renderPosterWall(posters) {
 
   posterWallLayoutKey = layoutKey;
   posterWall.style.setProperty("--poster-wall-columns", columnCount);
+  stopPosterWallAnimation();
   posterWall.replaceChildren();
+
+  const wallDeck = shuffleItems(usablePosters);
+  const tileCount = rowsPerColumn + POSTER_WALL_EXTRA_ROWS;
 
   for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
     const column = document.createElement("div");
@@ -557,21 +566,44 @@ function renderPosterWall(posters) {
     const track = document.createElement("div");
     track.className = "poster-wall-track";
     track.dataset.direction = columnIndex % 2 === 0 ? "up" : "down";
-    track.style.setProperty("--wall-delay", `${columnIndex * -6.5}s`);
 
-    const sequence = createPosterWallSequence(
-      usablePosters,
-      rowsPerColumn,
-      columnIndex * rowsPerColumn
-    );
-    track.append(sequence, sequence.cloneNode(true));
-    track.addEventListener("animationiteration", () => {
-      refreshPosterWallTrack(track, usablePosters, rowsPerColumn);
-    });
+    const state = {
+      track,
+      deck: createColumnPosterDeck(wallDeck, columnIndex),
+      cursor: 0,
+      direction: columnIndex % 2 === 0 ? -1 : 1,
+      offset: -Math.random() * posterStride,
+      stride: posterStride,
+      speed:
+        POSTER_WALL_BASE_SPEED +
+        (columnIndex % 5) * 0.65 +
+        Math.random() * POSTER_WALL_SPEED_VARIANCE,
+      recentPosterKeys: [],
+      recentPosterLimit: Math.min(
+        usablePosters.length,
+        Math.max(tileCount + 4, 18)
+      ),
+      tileSerial: columnIndex * 1000
+    };
+
+    for (let tileIndex = 0; tileIndex < tileCount; tileIndex += 1) {
+      track.append(
+        createPosterWallTile(
+          getNextPosterForColumn(state),
+          state.tileSerial
+        )
+      );
+      state.tileSerial += 1;
+    }
+
+    track.style.setProperty("--wall-offset", `${state.offset.toFixed(2)}px`);
 
     column.append(track);
     posterWall.append(column);
+    posterWallColumns.push(state);
   }
+
+  startPosterWallAnimation();
 }
 
 function schedulePosterWallRender() {
@@ -605,56 +637,182 @@ function getPosterWallLayout() {
     POSTER_WALL_MAX_ROWS
   );
 
-  return { columnCount, rowsPerColumn };
+  return { columnCount, rowsPerColumn, posterStride };
 }
 
 function clampNumber(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function createPosterWallSequence(posters, rowsPerColumn, startIndex) {
-  const sequence = document.createElement("div");
-  sequence.className = "poster-wall-sequence";
-
-  getRandomPosterSet(posters, rowsPerColumn).forEach((poster, index) => {
-    sequence.append(createPosterWallTile(poster, startIndex + index));
-  });
-
-  return sequence;
-}
-
-function refreshPosterWallTrack(track, posters, rowsPerColumn) {
-  const sequences = track.querySelectorAll(".poster-wall-sequence");
-  const [firstSequence, secondSequence] = sequences;
-
-  if (!firstSequence || !secondSequence) {
+function startPosterWallAnimation() {
+  if (posterWallAnimationFrame || !posterWallColumns.length) {
     return;
   }
 
-  const replacement = createPosterWallSequence(
-    posters,
-    rowsPerColumn,
-    Math.floor(Math.random() * 1000)
+  posterWallLastTimestamp = performance.now();
+  posterWallAnimationFrame = window.requestAnimationFrame(stepPosterWall);
+}
+
+function stopPosterWallAnimation() {
+  if (posterWallAnimationFrame) {
+    window.cancelAnimationFrame(posterWallAnimationFrame);
+  }
+
+  posterWallAnimationFrame = 0;
+  posterWallLastTimestamp = 0;
+  posterWallColumns = [];
+}
+
+function stepPosterWall(timestamp) {
+  const elapsedSeconds = Math.min(
+    (timestamp - posterWallLastTimestamp) / 1000,
+    POSTER_WALL_MAX_FRAME_DELTA
   );
 
-  if (track.dataset.direction === "down") {
-    secondSequence.replaceWith(firstSequence.cloneNode(true));
-    firstSequence.replaceWith(replacement);
+  posterWallLastTimestamp = timestamp;
+
+  posterWallColumns.forEach((state) => {
+    if (!state.stride) {
+      return;
+    }
+
+    state.offset += state.direction * state.speed * elapsedSeconds;
+
+    if (state.direction < 0) {
+      while (state.offset <= -state.stride) {
+        recyclePosterWallTile(state);
+        state.offset += state.stride;
+      }
+    } else {
+      while (state.offset >= 0) {
+        recyclePosterWallTile(state);
+        state.offset -= state.stride;
+      }
+    }
+
+    state.track.style.setProperty("--wall-offset", `${state.offset.toFixed(2)}px`);
+  });
+
+  posterWallAnimationFrame = window.requestAnimationFrame(stepPosterWall);
+}
+
+function recyclePosterWallTile(state) {
+  const tile =
+    state.direction < 0
+      ? state.track.firstElementChild
+      : state.track.lastElementChild;
+
+  if (!tile) {
+    return;
+  }
+
+  updatePosterWallTile(tile, getNextPosterForColumn(state), state.tileSerial);
+  state.tileSerial += 1;
+
+  if (state.direction < 0) {
+    state.track.append(tile);
   } else {
-    firstSequence.replaceWith(secondSequence.cloneNode(true));
-    secondSequence.replaceWith(replacement);
+    state.track.prepend(tile);
   }
 }
 
-function getRandomPosterSet(posters, count) {
-  const shuffledPosters = shuffleItems(posters);
-  const selectedPosters = [];
-
-  for (let index = 0; index < count; index += 1) {
-    selectedPosters.push(shuffledPosters[index % shuffledPosters.length]);
+function createColumnPosterDeck(posters, columnIndex) {
+  if (posters.length < 2) {
+    return [...posters];
   }
 
-  return selectedPosters;
+  const step = getCoprimeStep(posters.length, 5 + columnIndex * 6);
+  const offset = (columnIndex * 17) % posters.length;
+
+  return posters.map((_, index) => posters[(offset + index * step) % posters.length]);
+}
+
+function getCoprimeStep(length, seed) {
+  let step = seed % length || 1;
+
+  while (getGreatestCommonDivisor(step, length) !== 1) {
+    step = (step % length) + 1;
+  }
+
+  return step;
+}
+
+function getGreatestCommonDivisor(firstValue, secondValue) {
+  let first = firstValue;
+  let second = secondValue;
+
+  while (second) {
+    const next = first % second;
+    first = second;
+    second = next;
+  }
+
+  return first;
+}
+
+function getNextPosterForColumn(state) {
+  if (!state.deck.length) {
+    return null;
+  }
+
+  let selectedPoster = state.deck[state.cursor % state.deck.length];
+
+  for (let attempts = 0; attempts < state.deck.length; attempts += 1) {
+    const poster = state.deck[state.cursor % state.deck.length];
+    state.cursor += 1;
+
+    if (!state.recentPosterKeys.includes(getPosterKey(poster))) {
+      selectedPoster = poster;
+      break;
+    }
+  }
+
+  rememberPosterForColumn(state, selectedPoster);
+  return selectedPoster;
+}
+
+function rememberPosterForColumn(state, poster) {
+  const key = getPosterKey(poster);
+
+  if (!key) {
+    return;
+  }
+
+  state.recentPosterKeys.push(key);
+
+  while (state.recentPosterKeys.length > state.recentPosterLimit) {
+    state.recentPosterKeys.shift();
+  }
+}
+
+function getUniquePosterWallPosters(posters) {
+  const seenPosters = new Set();
+  const uniquePosters = [];
+
+  (Array.isArray(posters) ? posters : []).forEach((poster) => {
+    if (!poster?.posterUrl) {
+      return;
+    }
+
+    const key = getPosterKey(poster);
+
+    if (seenPosters.has(key)) {
+      return;
+    }
+
+    seenPosters.add(key);
+    uniquePosters.push(poster);
+  });
+
+  return uniquePosters;
+}
+
+function getPosterKey(poster) {
+  if (!poster) {
+    return "";
+  }
+
+  return String(poster.id || poster.posterUrl || poster.title || "");
 }
 
 function shuffleItems(items) {
@@ -671,15 +829,37 @@ function shuffleItems(items) {
 function createPosterWallTile(poster, index) {
   const tile = document.createElement("div");
   tile.className = "poster-wall-tile";
-  tile.style.setProperty("--tilt", `${((index % 5) - 2) * 0.55}deg`);
 
   const image = document.createElement("img");
-  image.src = poster.posterUrl;
   image.alt = "";
-  image.loading = "lazy";
+  image.decoding = "async";
+  image.loading = "eager";
+  image.fetchPriority = "low";
+  image.addEventListener("load", () => {
+    image.hidden = false;
+  });
+  image.addEventListener("error", () => {
+    image.hidden = true;
+  });
 
   tile.append(image);
+  updatePosterWallTile(tile, poster, index);
   return tile;
+}
+
+function updatePosterWallTile(tile, poster, index) {
+  tile.style.setProperty("--tilt", `${((index % 5) - 2) * 0.55}deg`);
+  tile.dataset.posterKey = getPosterKey(poster);
+
+  const image = tile.querySelector("img");
+
+  if (!image || !poster?.posterUrl) {
+    return;
+  }
+
+  if (image.src !== poster.posterUrl) {
+    image.src = poster.posterUrl;
+  }
 }
 
 function renderRelatedResults(data) {

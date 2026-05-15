@@ -61,6 +61,8 @@ const FALLBACK_POSTER_WALL = [
 ];
 
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
+const POSTER_WALL_PAGE_SAMPLE_COUNT = 12;
+const POSTER_WALL_LIMIT = 240;
 
 const TMDB_MOVIE_GENRES = [
   { id: 28, name: "Action" },
@@ -110,6 +112,7 @@ const MIME_TYPES = {
   ".otf": "font/otf",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
+  ".png": "image/png",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon"
 };
@@ -391,19 +394,20 @@ async function handlePosterWall(res) {
 async function discoverPosterWallMovies() {
   const firstPage = await fetchTmdbJson(createDiscoverUrl({ page: 1 }));
   const pageCount = Math.min(Number(firstPage.total_pages || 1), 20);
-  const pages = getRandomPages(pageCount, 4, [1]);
-  const pageResults = [firstPage];
-
-  for (const page of pages) {
-    pageResults.push(await fetchTmdbJson(createDiscoverUrl({ page })));
-  }
+  const pages = getRandomPages(pageCount, POSTER_WALL_PAGE_SAMPLE_COUNT, [1]);
+  const pageResults = [
+    firstPage,
+    ...(await Promise.all(
+      pages.map((page) => fetchTmdbJson(createDiscoverUrl({ page })))
+    ))
+  ];
 
   return uniqueMovies(
     pageResults.flatMap((page) => (Array.isArray(page.results) ? page.results : []))
   )
     .filter(isUsableEnglishMovie)
     .sort(() => Math.random() - 0.5)
-    .slice(0, 72)
+    .slice(0, POSTER_WALL_LIMIT)
     .map(formatPosterMovie);
 }
 
