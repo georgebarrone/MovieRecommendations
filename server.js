@@ -127,12 +127,26 @@ const movieSystemPrompt = [
   "Do not claim exact streaming availability unless the user provides it; suggest they check their preferred services."
 ].join(" ");
 
+const pickRecommendationSystemPrompt = [
+  "You are Movie Match, the same friendly movie recommendation assistant used in chat.",
+  "Use the user's selected movies as taste signals and recommend movies with a similar taste profile.",
+  "Prioritize shared tone, story shape, themes, emotional texture, pacing, visual style, and sense of humor over simple genre matching.",
+  "Prefer thoughtful, watchable recommendations over obscure database-adjacent matches.",
+  "Do not recommend any movie already selected by the user.",
+  "Return JSON only. Use this shape: {\"recommendations\":[{\"title\":\"Movie title\",\"year\":\"YYYY\",\"description\":\"One concise spoiler-free synopsis.\",\"fit\":\"One quick sentence explaining why it fits the selected movies.\"}]}"
+].join(" ");
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (req.method === "POST" && url.pathname === "/api/chat") {
       await handleChat(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/movies/recommendations") {
+      await handlePickRecommendations(req, res);
       return;
     }
 
@@ -236,13 +250,66 @@ async function handleChat(req, res) {
     return;
   }
 
-  const reply =
-    data.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || "")
-      .join("")
-      .trim() || "I could not generate a recommendation. Try again?";
+  const reply = extractGeminiText(data) || "I could not generate a recommendation. Try again?";
 
   sendJson(res, 200, { reply });
+}
+
+async function handlePickRecommendations(req, res) {
+  const body = await readJsonBody(req);
+  const favoriteMovies = sanitizeFavoriteMovieDetails(body.favoriteMovies);
+
+  if (!favoriteMovies.length) {
+    sendJson(res, 400, { error: "Add at least one movie pick first." });
+    return;
+  }
+
+  const excludedMovies = createExcludedMovieSet(favoriteMovies);
+  let results = [];
+  let source = "tmdb";
+
+  if (GEMINI_API_KEY) {
+    try {
+      const geminiRecommendations =
+        await generateGeminiPickRecommendations(favoriteMovies);
+      results = await enrichGeminiRecommendations(
+        geminiRecommendations,
+        excludedMovies
+      );
+      source = results.length ? "gemini" : source;
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  if (results.length < 3 && (TMDB_API_KEY || TMDB_ACCESS_TOKEN)) {
+    try {
+      const fallbackResults = await discoverMoviesFromFavoritePicks(
+        favoriteMovies,
+        excludedMovies,
+        3 - results.length
+      );
+      results = mergeRecommendationResults(results, fallbackResults).slice(0, 3);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  if (!results.length) {
+    const missingService = GEMINI_API_KEY
+      ? "Could not find matching movie cards right now."
+      : "Missing GEMINI_API_KEY. Add it to a .env file, or add TMDB credentials for fallback recommendations.";
+    sendJson(res, 502, { error: missingService });
+    return;
+  }
+
+  sendJson(res, 200, {
+    query: favoriteMovies.map(formatFavoriteMovieLabel).join(", "),
+    matchType: "picks",
+    matchName: "your picks",
+    source,
+    results: results.slice(0, 3)
+  });
 }
 
 async function handleMovieSearch(url, res) {
@@ -389,6 +456,217 @@ async function handlePosterWall(res) {
   } catch (error) {
     sendJson(res, 200, { posters: FALLBACK_POSTER_WALL });
   }
+}
+
+async function generateGeminiPickRecommendations(favoriteMovies) {
+  const pickList = favoriteMovies.map(formatFavoriteMovieLabel).join("; ");
+  const prompt = [
+    `The user selected these favorite movies: ${pickList}.`,
+    "Based on those picks, recommend exactly three movies they should watch next.",
+    "Use the same taste judgment you would use in a normal chat reply.",
+    "Avoid sequels, remakes, and obvious repeats unless one is truly the best fit.",
+    "For each movie, include a concise spoiler-free description and one quick sentence explaining why it fits those picks.",
+    "Return valid JSON only."
+  ].join("\n");
+
+  const geminiResponse = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      GEMINI_MODEL
+    )}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: pickRecommendationSystemPrompt }]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: createPickRecommendationGenerationConfig({
+          temperature: 0.72,
+          maxOutputTokens: 1000
+        })
+      })
+    }
+  );
+
+  const data = await geminiResponse.json().catch(() => ({}));
+
+  if (!geminiResponse.ok) {
+    const detail =
+      data.error?.message ||
+      `Gemini returned ${geminiResponse.status} ${geminiResponse.statusText}`;
+    throw new Error(detail);
+  }
+
+  const parsed = parseGeminiJson(extractGeminiText(data));
+  const rawRecommendations = Array.isArray(parsed)
+    ? parsed
+    : parsed.recommendations || parsed.movies || parsed.results || [];
+
+  return normalizeGeminiRecommendations(rawRecommendations, favoriteMovies);
+}
+
+async function enrichGeminiRecommendations(recommendations, excludedMovies) {
+  const results = [];
+  const seen = new Set();
+
+  for (const recommendation of recommendations) {
+    const normalizedTitle = normalizeSearchTerm(recommendation.title);
+
+    if (!normalizedTitle || excludedMovies.titles.has(normalizedTitle)) {
+      continue;
+    }
+
+    let matchedMovie = null;
+
+    if (TMDB_API_KEY || TMDB_ACCESS_TOKEN) {
+      try {
+        matchedMovie = await findTmdbMovieForRecommendation(
+          recommendation,
+          excludedMovies,
+          seen
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    if (matchedMovie) {
+      seen.add(String(matchedMovie.id));
+      results.push({
+        ...matchedMovie,
+        description: recommendation.description || matchedMovie.overview,
+        fitReason: recommendation.fit,
+        source: "gemini"
+      });
+      continue;
+    }
+
+    const syntheticId = `gemini-${normalizedTitle.replace(/\s+/g, "-")}`;
+
+    if (seen.has(syntheticId)) {
+      continue;
+    }
+
+    seen.add(syntheticId);
+    results.push({
+      id: syntheticId,
+      title: recommendation.title,
+      year: recommendation.year,
+      overview: "",
+      description: recommendation.description,
+      posterUrl: "",
+      tmdbUrl: "",
+      voteAverage: 0,
+      fitReason: recommendation.fit,
+      source: "gemini"
+    });
+  }
+
+  return results.slice(0, 3);
+}
+
+async function findTmdbMovieForRecommendation(
+  recommendation,
+  excludedMovies,
+  seenMovies
+) {
+  const tmdbUrl = new URL("https://api.themoviedb.org/3/search/movie");
+  tmdbUrl.searchParams.set("query", recommendation.title);
+  tmdbUrl.searchParams.set("include_adult", "false");
+  tmdbUrl.searchParams.set("language", "en-US");
+  tmdbUrl.searchParams.set("page", "1");
+
+  if (recommendation.year) {
+    tmdbUrl.searchParams.set("year", recommendation.year);
+  }
+
+  const data = await fetchTmdbJson(tmdbUrl);
+  const movies = Array.isArray(data.results) ? data.results : [];
+  const normalizedTitle = normalizeSearchTerm(recommendation.title);
+
+  const bestMatch =
+    movies.find((movie) => {
+      const movieTitle = normalizeSearchTerm(movie.title || movie.original_title);
+      return (
+        movieTitle === normalizedTitle &&
+        isUsableRecommendationMovie(movie) &&
+        !excludedMovies.ids.has(Number(movie.id)) &&
+        !seenMovies.has(String(movie.id))
+      );
+    }) ||
+    movies.find(
+      (movie) =>
+        isUsableRecommendationMovie(movie) &&
+        !excludedMovies.ids.has(Number(movie.id)) &&
+        !seenMovies.has(String(movie.id))
+    );
+
+  return bestMatch ? formatRelatedMovie(bestMatch) : null;
+}
+
+async function discoverMoviesFromFavoritePicks(
+  favoriteMovies,
+  excludedMovies,
+  limit = 3
+) {
+  const pickIds = favoriteMovies
+    .map((movie) => Number(movie.id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  if (!pickIds.length || limit <= 0) {
+    return [];
+  }
+
+  const candidateMap = new Map();
+
+  for (const [pickIndex, pickId] of pickIds.entries()) {
+    const recommendationPages = await Promise.allSettled([
+      fetchTmdbJson(createMovieSuggestionsUrl(pickId, "recommendations")),
+      fetchTmdbJson(createMovieSuggestionsUrl(pickId, "similar"))
+    ]);
+
+    recommendationPages.forEach((settled, sourceIndex) => {
+      if (settled.status !== "fulfilled") {
+        return;
+      }
+
+      const sourceWeight = sourceIndex === 0 ? 26 : 16;
+      const movies = Array.isArray(settled.value.results)
+        ? settled.value.results
+        : [];
+
+      movies.forEach((movie, index) => {
+        addSuggestionCandidate(candidateMap, movie, {
+          excludedMovies,
+          pickIndex,
+          sourceWeight,
+          rank: index
+        });
+      });
+    });
+  }
+
+  return [...candidateMap.values()]
+    .sort((first, second) => second.score - first.score)
+    .slice(0, limit)
+    .map((candidate) => {
+      const reason = buildFallbackFitReason(candidate.pickIndexes.size);
+      return {
+        ...formatRelatedMovie(candidate.movie),
+        description: candidate.movie.overview || "",
+        fitReason: reason,
+        source: "tmdb"
+      };
+    });
 }
 
 async function discoverPosterWallMovies() {
@@ -616,6 +894,226 @@ function formatRelatedMovie(movie) {
   };
 }
 
+function extractGeminiText(data) {
+  return (
+    data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("")
+      .trim() || ""
+  );
+}
+
+function parseGeminiJson(text) {
+  const trimmed = String(text || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  if (!trimmed) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch (error) {
+    const match = trimmed.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+
+    if (!match) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(match[0]);
+    } catch (nestedError) {
+      return {};
+    }
+  }
+}
+
+function normalizeGeminiRecommendations(recommendations, favoriteMovies) {
+  const excludedMovies = createExcludedMovieSet(favoriteMovies);
+  const seenTitles = new Set();
+
+  return (Array.isArray(recommendations) ? recommendations : [])
+    .map((movie) => {
+      const title = String(
+        movie?.title || movie?.name || movie?.movie || movie?.movieTitle || ""
+      )
+        .trim()
+        .slice(0, 120);
+      const yearMatch = String(
+        movie?.year || movie?.releaseYear || movie?.release_date || ""
+      ).match(/\d{4}/);
+      const year = yearMatch ? yearMatch[0] : "";
+      const description = cleanRecommendationCopy(
+        movie?.description || movie?.synopsis || movie?.overview || movie?.summary || ""
+      ).slice(0, 360);
+      const fit = cleanRecommendationCopy(
+        movie?.fit || movie?.reason || movie?.why || movie?.whyItFits || ""
+      ).slice(0, 260);
+
+      return { title, year, description, fit };
+    })
+    .map((movie) => ({
+      ...movie,
+      description: movie.description || movie.fit,
+      fit: movie.fit || movie.description
+    }))
+    .filter((movie) => {
+      const normalizedTitle = normalizeSearchTerm(movie.title);
+
+      if (
+        !normalizedTitle ||
+        seenTitles.has(normalizedTitle) ||
+        excludedMovies.titles.has(normalizedTitle)
+      ) {
+        return false;
+      }
+
+      seenTitles.add(normalizedTitle);
+      return true;
+    })
+    .slice(0, 3);
+}
+
+function cleanRecommendationCopy(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^["']|["']$/g, "");
+}
+
+function createPickRecommendationGenerationConfig({
+  temperature,
+  maxOutputTokens
+}) {
+  const config = {
+    temperature,
+    maxOutputTokens
+  };
+
+  if (/gemini-2\.5-flash/i.test(GEMINI_MODEL)) {
+    config.thinkingConfig = {
+      thinkingBudget: 0
+    };
+  }
+
+  return config;
+}
+
+function createMovieSuggestionsUrl(movieId, suggestionType) {
+  const safeSuggestionType =
+    suggestionType === "similar" ? "similar" : "recommendations";
+  const tmdbUrl = new URL(
+    `https://api.themoviedb.org/3/movie/${encodeURIComponent(
+      movieId
+    )}/${safeSuggestionType}`
+  );
+  tmdbUrl.searchParams.set("language", "en-US");
+  tmdbUrl.searchParams.set("page", "1");
+  return tmdbUrl;
+}
+
+function addSuggestionCandidate(
+  candidateMap,
+  movie,
+  { excludedMovies, pickIndex, sourceWeight, rank }
+) {
+  if (
+    !isUsableRecommendationMovie(movie) ||
+    excludedMovies.ids.has(Number(movie.id))
+  ) {
+    return;
+  }
+
+  const normalizedTitle = normalizeSearchTerm(movie.title || movie.original_title);
+
+  if (!normalizedTitle || excludedMovies.titles.has(normalizedTitle)) {
+    return;
+  }
+
+  const key = String(movie.id);
+  const voteAverage = Number(movie.vote_average || 0);
+  const voteCount = Number(movie.vote_count || 0);
+  const popularity = Number(movie.popularity || 0);
+  const score =
+    sourceWeight +
+    Math.max(0, 12 - rank) +
+    Math.min(voteAverage, 8) +
+    Math.min(voteCount / 350, 8) +
+    Math.min(popularity / 18, 5);
+
+  if (!candidateMap.has(key)) {
+    candidateMap.set(key, {
+      movie,
+      score,
+      pickIndexes: new Set([pickIndex])
+    });
+    return;
+  }
+
+  const candidate = candidateMap.get(key);
+  candidate.score += score + 12;
+  candidate.pickIndexes.add(pickIndex);
+}
+
+function isUsableRecommendationMovie(movie) {
+  return Boolean(
+    movie?.id &&
+      movie.poster_path &&
+      !movie.adult &&
+      (movie.title || movie.original_title)
+  );
+}
+
+function buildFallbackFitReason(pickCount) {
+  if (pickCount > 1) {
+    return "It overlaps with more than one of your picks, so it is the fallback match with the strongest shared signal.";
+  }
+
+  return "It shares recommendation signals with one of your picks, with ratings and popularity used as guardrails.";
+}
+
+function mergeRecommendationResults(primaryResults, fallbackResults) {
+  const seen = new Set();
+  const merged = [];
+
+  [...primaryResults, ...fallbackResults].forEach((movie) => {
+    const key = movie.id
+      ? `id:${movie.id}`
+      : `title:${normalizeSearchTerm(movie.title)}:${movie.year || ""}`;
+
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    merged.push(movie);
+  });
+
+  return merged;
+}
+
+function createExcludedMovieSet(favoriteMovies) {
+  return {
+    ids: new Set(
+      favoriteMovies
+        .map((movie) => Number(movie.id))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    ),
+    titles: new Set(
+      favoriteMovies
+        .map((movie) => normalizeSearchTerm(movie.title))
+        .filter(Boolean)
+    )
+  };
+}
+
+function formatFavoriteMovieLabel(movie) {
+  return movie.year ? `${movie.title} (${movie.year})` : movie.title;
+}
+
 function getRandomPages(pageCount, count, excludePages = []) {
   const excluded = new Set(excludePages);
   const pages = new Set();
@@ -696,6 +1194,37 @@ function sanitizeFavoriteMovies(favoriteMovies) {
       }
 
       return year ? `${title} (${year})` : title;
+    })
+    .filter(Boolean);
+}
+
+function sanitizeFavoriteMovieDetails(favoriteMovies) {
+  if (!Array.isArray(favoriteMovies)) {
+    return [];
+  }
+
+  return favoriteMovies
+    .slice(0, 4)
+    .map((movie) => {
+      if (typeof movie === "string") {
+        const title = movie.trim().slice(0, 120);
+        return title ? { id: "", title, year: "" } : null;
+      }
+
+      const id = Number(movie?.id);
+      const title = String(movie?.title || "").trim().slice(0, 120);
+      const yearMatch = String(movie?.year || "").match(/\d{4}/);
+      const year = yearMatch ? yearMatch[0] : "";
+
+      if (!title) {
+        return null;
+      }
+
+      return {
+        id: Number.isFinite(id) && id > 0 ? id : "",
+        title,
+        year
+      };
     })
     .filter(Boolean);
 }

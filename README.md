@@ -18,7 +18,7 @@ The core recommendation experience is in place, but the site is still being refi
 
 - A **film strip-themed** theater-style "Need a Rec?" landing experience with perforated edges, a moving TMDB poster wall, and classic cinema aesthetics.
 - Four favorite-movie poster slots powered by TMDB title search.
-- A "Search based on picks" flow that sends selected movies to the Gemini movie assistant.
+- A "Search based on picks" flow that asks Gemini for three structured recommendations and shows them in the movie-card modal.
 - A freeform chat assistant for movie recommendations by mood, genre, era, runtime, actor, language, or taste.
 - A genre-or-actor search box that returns three English-language TMDB movie matches.
 - TMDB poster fallbacks so the background still works if TMDB credentials are missing.
@@ -28,8 +28,8 @@ The core recommendation experience is in place, but the site is still being refi
 
 - Node.js built-in HTTP server
 - Static HTML, CSS, and JavaScript in `public/`
-- Gemini API for conversational recommendations
-- TMDB API for movie search, poster art, genre discovery, and actor-based discovery
+- Gemini API for conversational and poster-pick recommendations
+- TMDB API for movie search, poster art, genre discovery, actor-based discovery, and fallback taste matching
 
 ## Setup
 
@@ -58,6 +58,7 @@ Keep `.env` private and do not commit real API keys.
 ## API routes
 
 - `POST /api/chat` asks Gemini for movie recommendations.
+- `POST /api/movies/recommendations` asks Gemini for three poster-pick recommendations, then enriches the cards with TMDB poster data when available.
 - `GET /api/movies/search?query=...` searches TMDB movie titles for poster-slot picks.
 - `GET /api/movies/related?query=...` discovers three movies by matching a genre or actor.
 - `GET /api/movies/poster-wall` loads a randomized poster set for the animated background.

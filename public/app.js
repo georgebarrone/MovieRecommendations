@@ -81,6 +81,7 @@ let searchTimer = null;
 let searchController = null;
 let isChatLoading = false;
 let isRelatedLoading = false;
+let relatedResultsReturnFocus = genreActorInput;
 let currentPosterWallPosters = [];
 let posterWallResizeFrame = 0;
 let posterWallLayoutKey = "";
@@ -206,18 +207,7 @@ document.addEventListener("click", (event) => {
 });
 
 pickSearchButton.addEventListener("click", () => {
-  const picks = selectedMovies.filter(Boolean);
-
-  if (!picks.length) {
-    addMessage("model", "Add one or more movie picks first, then I can match the vibe.");
-    input.focus();
-    return;
-  }
-
-  const pickList = picks.map(formatMovieTitle).join(", ");
-  sendChatMessage(
-    `Based on my picks (${pickList}), recommend 1 or 2 movies I should watch next.`
-  );
+  searchPickRecommendations();
 });
 
 genreActorForm.addEventListener("submit", (event) => {
@@ -284,7 +274,7 @@ async function searchRelatedMovies(query) {
     return;
   }
 
-  openRelatedResults();
+  openRelatedResults(genreActorInput);
   setRelatedLoading(true);
   relatedResultsTitle.textContent = "Searching TMDB";
   relatedResultsStatus.textContent = "Finding three English-language matches...";
@@ -298,6 +288,53 @@ async function searchRelatedMovies(query) {
 
     if (!response.ok) {
       throw new Error(data.error || "TMDB search failed.");
+    }
+
+    renderRelatedResults(data);
+  } catch (error) {
+    relatedResultsTitle.textContent = "No matches";
+    relatedResultsStatus.textContent = error.message;
+    relatedResultsGrid.replaceChildren();
+  } finally {
+    setRelatedLoading(false);
+  }
+}
+
+async function searchPickRecommendations() {
+  if (isRelatedLoading) {
+    return;
+  }
+
+  const picks = selectedMovies.filter(Boolean);
+
+  if (!picks.length) {
+    openRelatedResults(pickSearchButton);
+    relatedResultsTitle.textContent = "Add movie picks";
+    relatedResultsStatus.textContent =
+      "Choose one to four movies first, then I can match the vibe.";
+    relatedResultsGrid.replaceChildren();
+    return;
+  }
+
+  openRelatedResults(pickSearchButton);
+  setRelatedLoading(true);
+  relatedResultsTitle.textContent = "Asking Gemini";
+  relatedResultsStatus.textContent =
+    "Building three recommendations from your poster picks...";
+  relatedResultsGrid.replaceChildren();
+
+  try {
+    const response = await fetch("/api/movies/recommendations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        favoriteMovies: getFavoriteMoviePayload()
+      })
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Recommendation search failed.");
     }
 
     renderRelatedResults(data);
@@ -865,18 +902,27 @@ function updatePosterWallTile(tile, poster, index) {
 function renderRelatedResults(data) {
   const movies = Array.isArray(data.results) ? data.results : [];
   const matchName = data.matchName || data.query || "that search";
+  const isPickMatch = data.matchType === "picks";
 
-  relatedResultsTitle.textContent = `Matches for ${matchName}`;
+  relatedResultsTitle.textContent = isPickMatch
+    ? "Recommendations from your picks"
+    : `Matches for ${matchName}`;
   relatedResultsGrid.replaceChildren();
 
   if (!movies.length) {
-    relatedResultsStatus.textContent = "No English-language movie matches found.";
+    relatedResultsStatus.textContent = isPickMatch
+      ? "No movie recommendations found."
+      : "No English-language movie matches found.";
     return;
   }
 
-  relatedResultsStatus.textContent = data.matchType === "actor"
-    ? "Actor match"
-    : "Genre match";
+  if (isPickMatch) {
+    relatedResultsStatus.textContent = "Based on your picks";
+  } else {
+    relatedResultsStatus.textContent = data.matchType === "actor"
+      ? "Actor match"
+      : "Genre match";
+  }
 
   movies.forEach((movie) => {
     const card = document.createElement("article");
@@ -902,7 +948,7 @@ function renderRelatedResults(data) {
     title.textContent = movie.year ? `${movie.title} (${movie.year})` : movie.title;
 
     const overview = document.createElement("p");
-    overview.textContent = movie.overview || "No synopsis available.";
+    overview.textContent = formatRelatedMovieCopy(movie, isPickMatch);
 
     copy.append(title, overview);
     card.append(poster, copy);
@@ -910,7 +956,19 @@ function renderRelatedResults(data) {
   });
 }
 
-function openRelatedResults() {
+function formatRelatedMovieCopy(movie, isPickMatch) {
+  const description = String(movie.description || movie.overview || "").trim();
+  const fitReason = String(movie.fitReason || "").trim();
+
+  if (isPickMatch && description && fitReason && description !== fitReason) {
+    return `${description} ${fitReason}`;
+  }
+
+  return description || fitReason || "No synopsis available.";
+}
+
+function openRelatedResults(returnFocusElement = genreActorInput) {
+  relatedResultsReturnFocus = returnFocusElement || genreActorInput;
   relatedResultsModal.hidden = false;
   document.body.classList.add("search-open");
 }
@@ -920,7 +978,10 @@ function closeRelatedResults() {
   relatedResultsGrid.replaceChildren();
   relatedResultsStatus.textContent = "";
   document.body.classList.remove("search-open");
-  genreActorInput.focus();
+
+  if (relatedResultsReturnFocus?.focus) {
+    relatedResultsReturnFocus.focus();
+  }
 }
 
 function closeResults() {
@@ -969,7 +1030,7 @@ function setLoading(isLoading) {
   isChatLoading = isLoading;
   input.disabled = isLoading;
   form.querySelector("button").disabled = isLoading;
-  pickSearchButton.disabled = isLoading;
+  updatePickSearchButtonState();
   statusPill.textContent = isLoading ? "Thinking" : "Ready";
 }
 
@@ -977,4 +1038,9 @@ function setRelatedLoading(isLoading) {
   isRelatedLoading = isLoading;
   genreActorInput.disabled = isLoading;
   genreActorForm.querySelector("button").disabled = isLoading;
+  updatePickSearchButtonState();
+}
+
+function updatePickSearchButtonState() {
+  pickSearchButton.disabled = isChatLoading || isRelatedLoading;
 }
