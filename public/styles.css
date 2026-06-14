@@ -861,6 +861,13 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.related-movie-poster-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
 .related-movie-poster {
   display: grid;
   width: 100%;
@@ -878,6 +885,79 @@ textarea:focus {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.related-movie-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.external-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  min-width: 120px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.external-link-button img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.external-link-button:hover,
+.external-link-button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.related-movie-providers {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  margin-top: 0;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.related-movie-providers p {
+  margin: 0 0 8px;
+}
+
+.related-movie-providers p:last-child {
+  margin-bottom: 0;
+}
+
+.related-movie-providers strong {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.related-movie-provider-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: underline;
+}
+
+.related-movie-provider-link:hover,
+.related-movie-provider-link:focus-visible {
+  color: #fff;
 }
 
 .related-movie-copy {
@@ -902,6 +982,128 @@ textarea:focus {
   text-align: left;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 5;
+}
+
+.related-movie-card {
+  cursor: pointer;
+}
+
+.related-movie-card:hover,
+.related-movie-card:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.5);
+  outline-offset: -1px;
+}
+
+.related-results-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  margin: 0 0 18px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font-size: 0.95rem;
+  min-width: 40px;
+}
+
+.related-movie-detail {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(260px, 1fr));
+  gap: 18px;
+  align-items: start;
+  grid-auto-rows: minmax(min-content, auto);
+}
+
+.related-movie-detail.no-fit-reason {
+  grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.3fr);
+}
+
+.related-movie-detail .related-movie-poster {
+  min-height: 0;
+  max-height: 640px;
+}
+
+.related-movie-detail .related-movie-description,
+.related-movie-detail .related-movie-fit {
+  padding: 18px 18px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.related-movie-detail .related-movie-fit {
+  display: grid;
+  gap: 12px;
+}
+
+.related-movie-detail .related-movie-description h3,
+.related-movie-detail .related-movie-fit h3 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.related-movie-detail .related-movie-description p,
+.related-movie-detail .related-movie-fit p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.related-movie-detail .related-movie-description p + p,
+.related-movie-detail .related-movie-fit p + p {
+  margin-top: 16px;
+}
+
+.related-movie-score-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 16px 0 0;
+}
+
+.related-movie-score {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.related-movie-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.external-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.external-link-button:hover,
+.external-link-button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.movie-fit-label {
+  display: block;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 .movie-results {

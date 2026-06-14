@@ -160,6 +160,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/movies/providers") {
+      await handleMovieProviders(url, res);
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/movies/poster-wall") {
       await handlePosterWall(res);
       return;
@@ -455,6 +460,62 @@ async function handlePosterWall(res) {
     });
   } catch (error) {
     sendJson(res, 200, { posters: FALLBACK_POSTER_WALL });
+  }
+}
+
+async function handleMovieProviders(url, res) {
+  if (!TMDB_API_KEY && !TMDB_ACCESS_TOKEN) {
+    sendJson(res, 500, {
+      error: "Missing TMDB_API_KEY. Add it to a .env file in the project root."
+    });
+    return;
+  }
+
+  const movieId = String(url.searchParams.get("movieId") || "").trim();
+  if (!movieId) {
+    sendJson(res, 400, { error: "Missing movieId parameter." });
+    return;
+  }
+
+  try {
+    const tmdbUrl = new URL(
+      `https://api.themoviedb.org/3/movie/${encodeURIComponent(
+        movieId
+      )}/watch/providers`
+    );
+
+    const data = await fetchTmdbJson(tmdbUrl);
+    const results = data.results || {};
+    const country = "US";
+    const countryData = results[country] || {};
+
+    const streamingProviders = [
+      ...(Array.isArray(countryData.flatrate) ? countryData.flatrate : []),
+      ...(Array.isArray(countryData.free) ? countryData.free : []),
+      ...(Array.isArray(countryData.ads) ? countryData.ads : [])
+    ]
+      .map((provider) => provider.provider_name)
+      .filter(Boolean);
+
+    const rentProviders = (Array.isArray(countryData.rent) ? countryData.rent : [])
+      .map((provider) => provider.provider_name)
+      .filter(Boolean);
+
+    const buyProviders = (Array.isArray(countryData.buy) ? countryData.buy : [])
+      .map((provider) => provider.provider_name)
+      .filter(Boolean);
+
+    const uniqueNames = (names) => [...new Set(names)];
+
+    sendJson(res, 200, {
+      country,
+      streaming: uniqueNames(streamingProviders),
+      rent: uniqueNames(rentProviders),
+      buy: uniqueNames(buyProviders)
+    });
+  } catch (error) {
+    console.error(error);
+    sendJson(res, 502, { error: "TMDB provider lookup failed." });
   }
 }
 
@@ -890,6 +951,7 @@ function formatRelatedMovie(movie) {
     overview: movie.overview || "",
     posterUrl: `${TMDB_IMAGE_BASE}${movie.poster_path}`,
     tmdbUrl: `https://www.themoviedb.org/movie/${movie.id}`,
+    tmdbWatchUrl: `https://www.themoviedb.org/movie/${movie.id}/watch`,
     voteAverage: Number(movie.vote_average || 0)
   };
 }

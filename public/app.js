@@ -82,6 +82,9 @@ let searchController = null;
 let isChatLoading = false;
 let isRelatedLoading = false;
 let relatedResultsReturnFocus = genreActorInput;
+let selectedRelatedMovie = null;
+let selectedRelatedMovieIsPickMatch = false;
+let lastRelatedResultsData = null;
 let currentPosterWallPosters = [];
 let posterWallResizeFrame = 0;
 let posterWallLayoutKey = "";
@@ -900,6 +903,16 @@ function updatePosterWallTile(tile, poster, index) {
 }
 
 function renderRelatedResults(data) {
+  lastRelatedResultsData = data;
+  selectedRelatedMovie = null;
+  selectedRelatedMovieIsPickMatch = false;
+  relatedResultsModal.classList.remove("detail-open");
+
+  const existingBackButton = relatedResultsModal.querySelector(".related-results-back");
+  if (existingBackButton) {
+    existingBackButton.remove();
+  }
+
   const movies = Array.isArray(data.results) ? data.results : [];
   const matchName = data.matchName || data.query || "that search";
   const isPickMatch = data.matchType === "picks";
@@ -927,6 +940,15 @@ function renderRelatedResults(data) {
   movies.forEach((movie) => {
     const card = document.createElement("article");
     card.className = "related-movie-card";
+    card.tabIndex = 0;
+
+    card.addEventListener("click", () => showRelatedMovieDetail(movie, isPickMatch));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showRelatedMovieDetail(movie, isPickMatch);
+      }
+    });
 
     const poster = document.createElement("div");
     poster.className = "related-movie-poster";
@@ -956,6 +978,156 @@ function renderRelatedResults(data) {
   });
 }
 
+async function showRelatedMovieDetail(movie, isPickMatch) {
+  selectedRelatedMovie = movie;
+  selectedRelatedMovieIsPickMatch = isPickMatch;
+
+  if (
+    selectedRelatedMovie?.id &&
+    !selectedRelatedMovie.providerInfo &&
+    !selectedRelatedMovie.providerInfoLoading
+  ) {
+    selectedRelatedMovie.providerInfoLoading = true;
+    renderRelatedMovieDetail();
+
+    try {
+      selectedRelatedMovie.providerInfo = await fetchMovieProviders(
+        selectedRelatedMovie.id
+      );
+    } catch {
+      selectedRelatedMovie.providerInfo = null;
+    } finally {
+      selectedRelatedMovie.providerInfoLoading = false;
+      renderRelatedMovieDetail();
+    }
+
+    return;
+  }
+
+  renderRelatedMovieDetail();
+}
+
+function renderRelatedMovieDetail() {
+  relatedResultsModal.classList.add("detail-open");
+  relatedResultsGrid.replaceChildren();
+
+  const existingBackButton = relatedResultsModal.querySelector(".related-results-back");
+  if (existingBackButton) {
+    existingBackButton.remove();
+  }
+
+  const backButton = document.createElement("button");
+  backButton.type = "button";
+  backButton.className = "related-results-back";
+  backButton.innerHTML = "← <span class=\"sr-only\">Back to suggestions</span>";
+  backButton.setAttribute("aria-label", "Back to suggestions");
+  backButton.addEventListener("click", () => renderRelatedResults(lastRelatedResultsData));
+  relatedResultsStatus.after(backButton);
+
+  if (!selectedRelatedMovie) {
+    return;
+  }
+
+  const detail = document.createElement("article");
+  detail.className = "related-movie-detail";
+
+  const posterBlock = document.createElement("div");
+  posterBlock.className = "related-movie-poster-block";
+
+  const poster = document.createElement("div");
+  poster.className = "related-movie-poster";
+
+  const letterboxdUrl = getLetterboxdSearchUrl(
+    selectedRelatedMovie.title,
+    selectedRelatedMovie.year
+  );
+
+  if (selectedRelatedMovie.posterUrl) {
+    const image = document.createElement("img");
+    image.src = selectedRelatedMovie.posterUrl;
+    image.alt = `${selectedRelatedMovie.title} poster`;
+    image.loading = "lazy";
+    poster.append(image);
+  } else {
+    poster.textContent = "No art";
+  }
+
+  posterBlock.append(poster);
+
+  const posterActions = document.createElement("div");
+  posterActions.className = "related-movie-actions";
+
+  if (selectedRelatedMovie.tmdbUrl) {
+    posterActions.append(createExternalLinkButton(selectedRelatedMovie.tmdbUrl, "TMDB"));
+  }
+
+  posterActions.append(
+    createExternalLinkButton(
+      letterboxdUrl,
+      "Letterboxd",
+      "/assets/letterboxd-logo.png"
+    )
+  );
+
+  const descriptionCopy = document.createElement("div");
+  descriptionCopy.className = "related-movie-description";
+
+  const title = document.createElement("h3");
+  title.textContent = selectedRelatedMovie.year
+    ? `${selectedRelatedMovie.title} (${selectedRelatedMovie.year})`
+    : selectedRelatedMovie.title;
+
+  const description = document.createElement("p");
+  description.textContent = selectedRelatedMovie.description || selectedRelatedMovie.overview || "No synopsis available.";
+
+  descriptionCopy.append(title);
+
+  if (selectedRelatedMovie.voteAverage > 0) {
+    const scoreRow = document.createElement("div");
+    scoreRow.className = "related-movie-score-row";
+
+    const score = document.createElement("p");
+    score.className = "related-movie-score";
+    score.textContent = `TMDB score: ${selectedRelatedMovie.voteAverage.toFixed(1)}/10`;
+    scoreRow.append(score);
+    descriptionCopy.append(scoreRow);
+  }
+
+  descriptionCopy.append(description);
+
+  detail.append(posterBlock, descriptionCopy);
+
+  const hasFitReason = Boolean(selectedRelatedMovie.fitReason);
+
+  if (!hasFitReason) {
+    detail.classList.add("no-fit-reason");
+  }
+
+  if (hasFitReason) {
+    const fitCopy = document.createElement("div");
+    fitCopy.className = "related-movie-fit";
+
+    const reasonLabel = document.createElement("span");
+    reasonLabel.className = "movie-fit-label";
+    reasonLabel.textContent = "Why it fits:";
+
+    const reason = document.createElement("p");
+    reason.textContent = selectedRelatedMovie.fitReason;
+
+    fitCopy.append(reasonLabel, reason);
+    detail.append(fitCopy);
+  }
+
+  detail.append(posterActions);
+
+  const providerSection = createProviderSection(selectedRelatedMovie);
+  if (providerSection) {
+    detail.append(providerSection);
+  }
+
+  relatedResultsGrid.append(detail);
+}
+
 function formatRelatedMovieCopy(movie, isPickMatch) {
   const description = String(movie.description || movie.overview || "").trim();
   const fitReason = String(movie.fitReason || "").trim();
@@ -965,6 +1137,107 @@ function formatRelatedMovieCopy(movie, isPickMatch) {
   }
 
   return description || fitReason || "No synopsis available.";
+}
+
+function getLetterboxdSearchUrl(title, year) {
+  const query = [title, year].filter(Boolean).join(" ");
+  return `https://letterboxd.com/search/films/${encodeURIComponent(query)}/`;
+}
+
+function createExternalLinkButton(href, label, iconSrc) {
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.target = "_blank";
+  anchor.rel = "noopener noreferrer";
+  anchor.className = "external-link-button";
+
+  if (iconSrc) {
+    const icon = document.createElement("img");
+    icon.src = iconSrc;
+    icon.alt = "";
+    icon.setAttribute("aria-hidden", "true");
+    anchor.append(icon);
+  }
+
+  anchor.append(document.createTextNode(label));
+  return anchor;
+}
+
+async function fetchMovieProviders(movieId) {
+  const response = await fetch(
+    `/api/movies/providers?movieId=${encodeURIComponent(movieId)}`
+  );
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Provider lookup failed.");
+  }
+
+  return data;
+}
+
+function createProviderSection(movie) {
+  if (!movie) {
+    return null;
+  }
+
+  if (movie.providerInfoLoading) {
+    const section = document.createElement("div");
+    section.className = "related-movie-providers";
+    const loading = document.createElement("p");
+    loading.textContent = "Checking streaming availability...";
+    section.append(loading);
+    return section;
+  }
+
+  const providerInfo = movie.providerInfo;
+  if (providerInfo === null) {
+    const section = document.createElement("div");
+    section.className = "related-movie-providers";
+    const noAvailability = document.createElement("p");
+    noAvailability.textContent = "Streaming availability could not be loaded right now.";
+    section.append(noAvailability);
+    return section;
+  }
+
+  if (!providerInfo) {
+    return null;
+  }
+
+  const allProviders = [
+    ...(Array.isArray(providerInfo.streaming) ? providerInfo.streaming : []),
+    ...(Array.isArray(providerInfo.rent) ? providerInfo.rent : []),
+    ...(Array.isArray(providerInfo.buy) ? providerInfo.buy : [])
+  ];
+
+  const providerNames = [...new Set(allProviders)];
+
+  if (!providerNames.length) {
+    const section = document.createElement("div");
+    section.className = "related-movie-providers";
+    const noAvailability = document.createElement("p");
+    noAvailability.textContent = "Streaming availability not found for this title.";
+    section.append(noAvailability);
+    return section;
+  }
+
+  const section = document.createElement("div");
+  section.className = "related-movie-providers";
+  const providerRow = document.createElement("p");
+  providerRow.innerHTML = `<strong>Available on:</strong> ${providerNames.join(", ")}`;
+  section.append(providerRow);
+
+  if (movie.tmdbWatchUrl) {
+    const link = document.createElement("a");
+    link.href = movie.tmdbWatchUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.className = "related-movie-provider-link";
+    link.textContent = "View full streaming options on TMDB";
+    section.append(link);
+  }
+
+  return section;
 }
 
 function openRelatedResults(returnFocusElement = genreActorInput) {
