@@ -1,79 +1,73 @@
 # MovieRecommendations
 
-Need a movie suggestion? Come here.
+Need a movie suggestion? This repository contains a small Node.js web app that serves a static frontend and provides API routes for movie recommendations and search.
 
-MovieRecommendations is a work-in-progress movie recommendation web app. It currently runs as a small Node.js server that serves the front end and proxies API requests to Gemini and TMDB.
+## Overview (current state)
 
-## Demo
+- Server: `server.js` is a minimal Node HTTP server that serves files from `public/` and exposes API endpoints under `/api/*` for chat, search, and poster-wall data.
+- Frontend: `public/` contains the static app (`index.html`, `app.js`, `styles.css`) offering a poster wall, a chat UI, a genre/actor search form, and a pick-based recommendation flow.
+- AI integration: optional Gemini support. Set `GEMINI_API_KEY` in a `.env` file to enable chat-based recommendations.
+- Movie data: The Movie Database (TMDB) is used for search and poster artwork. Provide `TMDB_API_KEY` or `TMDB_ACCESS_TOKEN` to enable full search and poster features.
 
-A static demo with hard-coded example posters, chat messages, and genre/actor searches is available on GitHub Pages:
+This app is a work-in-progress but the core recommendation flows are implemented, including a pick-based recommendation flow that combines Gemini output (when available) with TMDB-backed enrichment.
 
-https://georgebarrone.github.io/MovieRecommendations/
+## Features
 
-The demo is hosted from the `pages-demo` branch and does not call Gemini, TMDB search, or the local Node API.
+- Chat-based movie recommendations via Gemini (when `GEMINI_API_KEY` is set).
+- Pick/search-based recommendations with TMDB fallback discovery.
+- Endpoints:
+	- `POST /api/chat` — chat recommendations.
+	- `POST /api/movies/recommendations` — pick-based recommendations.
+	- `GET /api/movies/search?query=...` — TMDB title search.
+	- `GET /api/movies/related?query=...` — related/discovery results.
+	- `GET /api/movies/poster-wall` — poster wall data for the animated background.
 
-## Current state
+## Requirements
 
-The core recommendation experience is in place, but the site is still being refined. The current build includes:
+- Node.js 18 or newer.
 
-- A **film strip-themed** theater-style "Need a Rec?" landing experience with perforated edges, a moving TMDB poster wall, and classic cinema aesthetics.
-- Four favorite-movie poster slots powered by TMDB title search.
-- A "Search based on picks" flow that asks Gemini for three structured recommendations and shows them in the movie-card modal.
-- A freeform chat assistant for movie recommendations by mood, genre, era, runtime, actor, language, or taste.
-- A genre-or-actor search box that returns three English-language TMDB movie matches.
-- TMDB poster fallbacks so the background still works if TMDB credentials are missing.
-- Local Limelight and Courier Prime font files for the current vintage cinema visual style.
+## Environment variables
 
-## Tech stack
+- `GEMINI_API_KEY` — (optional) API key for Gemini; required to enable chat recommendations.
+- `GEMINI_MODEL` — (optional) Gemini model name; defaults to `gemini-2.5-flash`.
+- `TMDB_API_KEY` or `TMDB_ACCESS_TOKEN` — (optional) TMDB credentials for search/posters.
+- `PORT` — (optional) server port (default: `3000`).
 
-- Node.js built-in HTTP server
-- Static HTML, CSS, and JavaScript in `public/`
-- Gemini API for conversational and poster-pick recommendations
-- TMDB API for movie search, poster art, genre discovery, actor-based discovery, and fallback taste matching
+The server logs helpful warnings on startup if keys are missing.
 
-## Setup
+## Run locally
 
-1. Install Node.js 18 or newer.
-2. Copy `.env.example` to `.env`.
-3. Add your API keys:
+1. Install Node.js 18+.
+2. (Optional) Copy `.env.example` to `.env` and add your API keys.
 
-```env
-GEMINI_API_KEY=your_real_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
-TMDB_API_KEY=your_tmdb_api_key_here
+```bash
+npm install
 ```
-
-You can also use `TMDB_ACCESS_TOKEN` or `TMDB_READ_ACCESS_TOKEN` instead of `TMDB_API_KEY`.
-
-4. Start the site:
 
 ```bash
 npm start
+# or
+node server.js
 ```
 
-5. Open `http://localhost:3000`.
+Open http://localhost:3000.
 
-Keep `.env` private and do not commit real API keys.
+## Where to look in the code
 
-## API routes
+- Server: `server.js` — HTTP server, API handlers, and TMDB/Gemini integration points.
+- Frontend: `public/index.html`, `public/app.js`, `public/styles.css`.
+- Static assets: `public/assets/`.
 
-- `POST /api/chat` asks Gemini for movie recommendations.
-- `POST /api/movies/recommendations` asks Gemini for three poster-pick recommendations, then enriches the cards with TMDB poster data when available.
-- `GET /api/movies/search?query=...` searches TMDB movie titles for poster-slot picks.
-- `GET /api/movies/related?query=...` discovers three movies by matching a genre or actor.
-- `GET /api/movies/poster-wall` loads a randomized poster set for the animated background.
+## Notes
 
-## Hosting notes
+- The GitHub Pages demo (if present in another branch) contains a static demo that does not call Gemini or TMDB.
+- Keep real API keys out of source control; use `.env`.
 
-The full app cannot currently run on GitHub Pages by itself because GitHub Pages only serves static files, and this project needs the Node server for API routes and private API keys.
+## Contributing
 
-The GitHub Pages demo uses hard-coded examples so visitors can try the front-end flow without requiring API keys or a running backend. The live chat, poster search, genre search, and API-backed poster loading still require the Node server unless those routes move to a separate backend or serverless function host.
+- Open an issue or submit a PR. Run the server locally to verify changes.
 
-## Work in progress
+## License
 
-Next likely improvements:
+- No license specified.
 
-- Add production hosting on a platform that can run Node or serverless functions.
-- Connect the public demo to live API-backed recommendations once production hosting is available.
-- Improve loading, empty, and error states around API-backed search.
-- Add automated tests for route handlers and UI behavior.
