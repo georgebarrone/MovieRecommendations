@@ -1768,10 +1768,12 @@ async function loadTasteProfile() {
     renderTasteList(tasteProfileLikes, likes, "No liked movies yet.");
     renderTasteList(tasteProfileDislikes, dislikes, "No disliked movies yet.");
     tasteProfileStatus.textContent = "Saved feedback from your account.";
+    return true;
   } catch (error) {
     tasteProfileStatus.textContent = error.message;
     tasteProfileLikes.replaceChildren();
     tasteProfileDislikes.replaceChildren();
+    return false;
   }
 }
 
@@ -1788,9 +1790,48 @@ function renderTasteList(listElement, movies, emptyText) {
 
   movies.forEach((movie) => {
     const item = document.createElement("li");
-    item.textContent = formatMovieTitle(movie);
+    item.className = "taste-profile-item";
+
+    const title = document.createElement("span");
+    title.className = "taste-profile-movie-title";
+    title.textContent = formatMovieTitle(movie);
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "taste-profile-remove-button";
+    removeButton.textContent = "x";
+    removeButton.setAttribute(
+      "aria-label",
+      `Remove ${formatMovieTitle(movie)} from your taste profile`
+    );
+    removeButton.addEventListener("click", () => removeTasteProfileMovie(movie));
+
+    item.append(title, removeButton);
     listElement.append(item);
   });
+}
+
+async function removeTasteProfileMovie(movie) {
+  if (isFeedbackLoading) {
+    return;
+  }
+
+  const movieTitle = formatMovieTitle(movie);
+  setFeedbackLoading(true);
+  tasteProfileStatus.textContent = `Removing ${movieTitle}...`;
+
+  try {
+    await deleteMovieFeedback(movie);
+    const didLoad = await loadTasteProfile();
+
+    if (didLoad) {
+      tasteProfileStatus.textContent = `Removed ${movieTitle}.`;
+    }
+  } catch (error) {
+    tasteProfileStatus.textContent = error.message;
+  } finally {
+    setFeedbackLoading(false);
+  }
 }
 
 async function fetchMovieFeedback(status) {
@@ -1907,6 +1948,11 @@ function setFeedbackLoading(isLoading) {
       button.disabled = isLoading;
     }
   );
+  Array.from(
+    tasteProfileModal.querySelectorAll(".taste-profile-remove-button")
+  ).forEach((button) => {
+    button.disabled = isLoading;
+  });
 }
 
 function updateLibraryBodyLock() {

@@ -839,7 +839,8 @@ textarea:focus {
 .account-logout-button:disabled,
 .watchlist-back-button:disabled,
 .feedback-action-button:disabled,
-.watchlist-remove-button:disabled {
+.watchlist-remove-button:disabled,
+.taste-profile-remove-button:disabled {
   cursor: wait;
   opacity: 0.65;
 }
@@ -1290,6 +1291,38 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+.taste-profile-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 10px;
+  align-items: center;
+}
+
+.taste-profile-movie-title {
+  min-width: 0;
+}
+
+.taste-profile-remove-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  min-width: 0;
+  padding: 0 0 3px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.taste-profile-remove-button:hover,
+.taste-profile-remove-button:focus-visible {
+  background: rgba(197, 31, 54, 0.38);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
 .taste-profile-empty {
   color: var(--muted);
 }
@@ -1367,6 +1400,10 @@ textarea:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 0 18px 18px;
+}
+
+.related-results-grid > * {
+  min-width: 0;
 }
 
 .related-movie-card {
@@ -1531,6 +1568,12 @@ textarea:focus {
   gap: 18px;
   align-items: start;
   grid-auto-rows: minmax(min-content, auto);
+  width: 100%;
+  min-width: 0;
+}
+
+.related-movie-detail > * {
+  min-width: 0;
 }
 
 .related-movie-detail.no-fit-reason {
@@ -1822,11 +1865,55 @@ textarea:focus {
 
   .related-results-grid {
     grid-template-columns: 1fr;
+    padding: 0 12px 16px;
   }
 
   .related-movie-card {
     display: grid;
     grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .related-results-popover {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .related-movie-detail,
+  .related-movie-detail.no-fit-reason {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .related-movie-detail .related-movie-poster-block {
+    width: min(190px, 54vw);
+    justify-self: center;
+  }
+
+  .related-movie-detail .related-movie-poster {
+    max-height: none;
+  }
+
+  .related-movie-detail .related-movie-description,
+  .related-movie-detail .related-movie-fit,
+  .related-movie-providers {
+    padding: 14px;
+  }
+
+  .related-movie-actions,
+  .related-movie-providers {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .related-movie-actions {
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+  }
+
+  .external-link-button {
+    flex: 1 1 126px;
+    min-width: 0;
   }
 
   .related-results-topline,
@@ -1913,6 +2000,10 @@ textarea:focus {
 
   .related-movie-card {
     grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .related-movie-detail .related-movie-poster-block {
+    width: min(160px, 50vw);
   }
 
   .account-corner {
