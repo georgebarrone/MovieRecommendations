@@ -1,16 +1,16 @@
-# MovieRecommendations
+# Need A Rec?
 
-Need a movie suggestion? This repository contains a small Node.js web app that serves a static frontend and provides API routes for movie recommendations and search.
+![A screenshot of the website](Screenshot%202026-06-17%20162245.png)
+
+Need a movie suggestion? This repository contains a Node.js web app that serves a theater-themed movie recommendation frontend and API routes for recommendations, search, accounts, and saved taste data.
 
 ## Overview (current state)
 
-- Server: `server.js` is a minimal Node HTTP server that serves files from `public/` and exposes API endpoints under `/api/*` for chat, search, account auth, and movie data.
-- Frontend: `public/` contains the static app (`index.html`, `app.js`, `styles.css`) offering a poster wall, a chat UI, a genre/actor search form, a pick-based recommendation flow, and a basic account modal.
-- AI integration: optional Gemini support. Set `GEMINI_API_KEY` in a `.env` file to enable chat-based recommendations.
-- Movie data: The Movie Database (TMDB) is used for search, poster artwork, and provider lookup. Provide `TMDB_API_KEY` or `TMDB_ACCESS_TOKEN` to enable full search and poster features.
-- Accounts: optional Turso/libSQL support adds basic username/password account creation, login/logout, and session cookies. Taste-profile UI wiring is not included yet.
-
-This app is a work-in-progress but the core recommendation flows are implemented, including a pick-based recommendation flow that combines Gemini output (when available) with TMDB-backed enrichment.
+- Server: `server.js` is a custom Node HTTP server that serves `public/` and exposes API endpoints under `/api/*` for chat, movie search, recommendations, provider lookup, account auth, profiles, and movie feedback.
+- Frontend: `public/` contains the static app (`index.html`, `app.js`, `styles.css`) with an animated poster wall, four-movie mood picker, genre/actor search, recommendation result details, chat UI, account modal, watch list page, taste profile modal, and feedback controls.
+- AI integration: Gemini powers chat recommendations and pick-based recommendations when `GEMINI_API_KEY` is set. Pick-based recommendations are enriched with TMDB data, and TMDB-backed suggestions are used as fallback results.
+- Movie data: The Movie Database (TMDB) is used for title search, genre/actor discovery, poster artwork, recommendation enrichment, animated poster-wall data, external TMDB links, and US watch-provider lookup when `TMDB_API_KEY` or `TMDB_ACCESS_TOKEN` is configured.
+- Accounts and taste data: Turso/libSQL account storage supports username/password registration, login/logout, session cookies, saved watch-list items, liked/disliked movie feedback, profile lookup, and taste-profile signals used by recommendations.
 
 ## System architecture
 
@@ -29,9 +29,11 @@ This app is a work-in-progress but the core recommendation flows are implemented
 ## Features
 
 - Chat-based movie recommendations via Gemini (when `GEMINI_API_KEY` is set).
-- Pick/search-based recommendations with TMDB fallback discovery.
+- Pick-based recommendations from up to four selected movies, with Gemini output and TMDB fallback discovery.
+- Genre and actor search backed by TMDB discovery.
 - Clickable recommendation results with expanded details, fit reasons, external links, and TMDB provider lookup.
-- Basic account modal for creating an account, logging in, and logging out when account storage is configured.
+- Account modal for creating an account, logging in, and logging out when account storage is configured.
+- Watch list and taste profile flows for saving movies, marking likes/dislikes, and removing saved feedback.
 - Endpoints:
   - `POST /api/chat` - chat recommendations.
   - `POST /api/movies/recommendations` - pick-based recommendations.
@@ -43,6 +45,10 @@ This app is a work-in-progress but the core recommendation flows are implemented
   - `POST /api/auth/register` - create a basic account.
   - `POST /api/auth/login` - log in.
   - `POST /api/auth/logout` - log out.
+  - `GET /api/profile` - signed-in user profile and taste data.
+  - `GET /api/movies/feedback?status=...` - saved movie feedback.
+  - `POST /api/movies/feedback` - create or update saved movie feedback.
+  - `DELETE /api/movies/feedback` - remove saved movie feedback.
 
 ## Requirements
 
@@ -85,12 +91,7 @@ Open http://localhost:3000.
 
 ## Notes
 
-- The GitHub Pages demo (if present in another branch) contains a static demo that does not call Gemini or TMDB.
 - Keep real API keys out of source control; use `.env`.
-
-## Contributing
-
-- Open an issue or submit a PR. Run the server locally to verify changes.
 
 ## License
 
