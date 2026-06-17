@@ -7,7 +7,7 @@ const { promisify } = require("util");
 const { createClient } = require("@libsql/client");
 
 // Project paths keep static file serving anchored to the repository root.
-const ROOT = __dirname;
+const ROOT = path.resolve(__dirname, "..");
 const PUBLIC_DIR = path.join(ROOT, "public");
 
 loadEnvFile(path.join(ROOT, ".env"));

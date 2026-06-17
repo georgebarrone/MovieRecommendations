@@ -1,12 +1,12 @@
 # Need A Rec?
 
-![A screenshot of the website](Screenshot%202026-06-17%20162245.png)
+![A screenshot of the website](docs/screenshots/homepage.png)
 
 Need a movie suggestion? This repository contains a Node.js web app that serves a theater-themed movie recommendation frontend and API routes for recommendations, search, accounts, and saved taste data.
 
 ## Overview (current state)
 
-- Server: `server.js` is a custom Node HTTP server that serves `public/` and exposes API endpoints under `/api/*` for chat, movie search, recommendations, provider lookup, account auth, profiles, and movie feedback.
+- Server: `src/server.js` is a custom Node HTTP server that serves `public/` and exposes API endpoints under `/api/*` for chat, movie search, recommendations, provider lookup, account auth, profiles, and movie feedback.
 - Frontend: `public/` contains the static app (`index.html`, `app.js`, `styles.css`) with an animated poster wall, four-movie mood picker, genre/actor search, recommendation result details, chat UI, account modal, watch list page, taste profile modal, and feedback controls.
 - AI integration: Gemini powers chat recommendations and pick-based recommendations when `GEMINI_API_KEY` is set. Pick-based recommendations are enriched with TMDB data, and TMDB-backed suggestions are used as fallback results.
 - Movie data: The Movie Database (TMDB) is used for title search, genre/actor discovery, poster artwork, recommendation enrichment, animated poster-wall data, external TMDB links, and US watch-provider lookup when `TMDB_API_KEY` or `TMDB_ACCESS_TOKEN` is configured.
@@ -78,14 +78,14 @@ npm install
 ```bash
 npm start
 # or
-node server.js
+node src/server.js
 ```
 
 Open http://localhost:3000.
 
 ## Where to look in the code
 
-- Server: `server.js` - HTTP server, API handlers, and TMDB/Gemini/account integration points.
+- Server: `src/server.js` - HTTP server, API handlers, and TMDB/Gemini/account integration points.
 - Frontend: `public/index.html`, `public/app.js`, `public/styles.css`.
 - Static assets: `public/assets/`.
 

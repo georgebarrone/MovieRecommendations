@@ -4,8 +4,8 @@
   "private": true,
   "description": "A simple Gemini-powered movie recommendation chat website.",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
   },
   "engines": {
     "node": ">=18"
