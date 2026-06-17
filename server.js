@@ -1,6 +1,9 @@
 const http = require("http");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { promisify } = require("util");
+const { createClient } = require("@libsql/client");
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
@@ -16,6 +19,12 @@ const TMDB_API_KEY = cleanSecret(process.env.TMDB_API_KEY);
 const TMDB_ACCESS_TOKEN = cleanSecret(
   process.env.TMDB_ACCESS_TOKEN || process.env.TMDB_READ_ACCESS_TOKEN
 );
+const TURSO_DATABASE_URL = cleanSecret(process.env.TURSO_DATABASE_URL);
+const TURSO_AUTH_TOKEN = cleanSecret(process.env.TURSO_AUTH_TOKEN);
+const SESSION_SECRET = cleanSecret(process.env.SESSION_SECRET);
+const AUTH_INVITE_CODE = cleanSecret(process.env.AUTH_INVITE_CODE);
+
+const scryptAsync = promisify(crypto.scrypt);
 
 const FALLBACK_POSTER_WALL = [
   {
@@ -63,6 +72,19 @@ const FALLBACK_POSTER_WALL = [
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 const POSTER_WALL_PAGE_SAMPLE_COUNT = 12;
 const POSTER_WALL_LIMIT = 240;
+const SESSION_COOKIE_NAME = "movie_match_session";
+const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
+const PASSWORD_KEY_LENGTH = 64;
+const TASTE_PROMPT_LIMIT = 12;
+const FEEDBACK_STATUS_VALUES = new Set([
+  "liked",
+  "disliked",
+  "watched",
+  "want_to_watch"
+]);
+
+let dbClient = null;
+let databaseReadyPromise = null;
 
 const TMDB_MOVIE_GENRES = [
   { id: 28, name: "Action" },
@@ -140,6 +162,46 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
+    if (req.method === "GET" && url.pathname === "/api/auth/me") {
+      await handleAuthMe(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/register") {
+      await handleAuthRegister(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/login") {
+      await handleAuthLogin(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/logout") {
+      await handleAuthLogout(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/profile") {
+      await handleProfile(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/movies/feedback") {
+      await handleGetMovieFeedback(url, req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/movies/feedback") {
+      await handleSaveMovieFeedback(req, res);
+      return;
+    }
+
+    if (req.method === "DELETE" && url.pathname === "/api/movies/feedback") {
+      await handleDeleteMovieFeedback(url, req, res);
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/chat") {
       await handleChat(req, res);
       return;
@@ -191,6 +253,21 @@ server.listen(PORT, () => {
   if (!TMDB_API_KEY && !TMDB_ACCESS_TOKEN) {
     console.log("Add TMDB_API_KEY to .env before using movie search.");
   }
+
+  if (!isDatabaseConfigured()) {
+    console.log("Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN to enable accounts.");
+  } else {
+    ensureDatabaseReady()
+      .then(() => console.log("Turso account database is ready."))
+      .catch((error) => {
+        console.error("Could not initialize Turso account database.");
+        console.error(error);
+      });
+  }
+
+  if (isDatabaseConfigured() && !SESSION_SECRET) {
+    console.log("Add SESSION_SECRET before using login sessions.");
+  }
 });
 
 async function handleChat(req, res) {
@@ -204,20 +281,17 @@ async function handleChat(req, res) {
   const body = await readJsonBody(req);
   const messages = sanitizeMessages(body.messages);
   const favoriteMovies = sanitizeFavoriteMovies(body.favoriteMovies);
+  const currentUser = await getOptionalCurrentUser(req);
+  const tasteProfile = currentUser
+    ? await getTasteProfile(currentUser.id, TASTE_PROMPT_LIMIT)
+    : createEmptyTasteProfile();
 
   if (!messages.length) {
     sendJson(res, 400, { error: "Send at least one message." });
     return;
   }
 
-  const systemPrompt = favoriteMovies.length
-    ? [
-        movieSystemPrompt,
-        `The user selected these favorite movies: ${favoriteMovies.join(
-          ", "
-        )}. Use them as taste signals when they ask for recommendations.`
-      ].join(" ")
-    : movieSystemPrompt;
+  const systemPrompt = buildChatSystemPrompt(favoriteMovies, tasteProfile);
 
   const geminiResponse = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -263,20 +337,27 @@ async function handleChat(req, res) {
 async function handlePickRecommendations(req, res) {
   const body = await readJsonBody(req);
   const favoriteMovies = sanitizeFavoriteMovieDetails(body.favoriteMovies);
+  const currentUser = await getOptionalCurrentUser(req);
+  const tasteProfile = currentUser
+    ? await getTasteProfile(currentUser.id, TASTE_PROMPT_LIMIT)
+    : createEmptyTasteProfile();
 
   if (!favoriteMovies.length) {
     sendJson(res, 400, { error: "Add at least one movie pick first." });
     return;
   }
 
-  const excludedMovies = createExcludedMovieSet(favoriteMovies);
+  const excludedMovies = createExcludedMovieSet([
+    ...favoriteMovies,
+    ...getTasteExcludedMovies(tasteProfile)
+  ]);
   let results = [];
   let source = "tmdb";
 
   if (GEMINI_API_KEY) {
     try {
       const geminiRecommendations =
-        await generateGeminiPickRecommendations(favoriteMovies);
+        await generateGeminiPickRecommendations(favoriteMovies, tasteProfile);
       results = await enrichGeminiRecommendations(
         geminiRecommendations,
         excludedMovies
@@ -519,16 +600,307 @@ async function handleMovieProviders(url, res) {
   }
 }
 
-async function generateGeminiPickRecommendations(favoriteMovies) {
+async function handleAuthMe(req, res) {
+  if (!isAuthConfigured()) {
+    sendJson(res, 200, { authConfigured: false, user: null });
+    return;
+  }
+
+  const user = await getOptionalCurrentUser(req);
+  sendJson(res, 200, { authConfigured: true, user: serializeUser(user) });
+}
+
+async function handleAuthRegister(req, res) {
+  if (!(await ensureAuthReady(res))) {
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  const authInput = sanitizeAuthInput(body);
+
+  if (!authInput.username) {
+    sendJson(res, 400, {
+      error: "Choose a username with 3-32 letters, numbers, underscores, or dashes."
+    });
+    return;
+  }
+
+  if (!authInput.password) {
+    sendJson(res, 400, { error: "Use a password with at least 8 characters." });
+    return;
+  }
+
+  const inviteCode = String(body.inviteCode || body.invite_code || "");
+
+  if (AUTH_INVITE_CODE && inviteCode !== AUTH_INVITE_CODE) {
+    sendJson(res, 403, { error: "That invite code is not valid." });
+    return;
+  }
+
+  const db = getDbClient();
+  const existingUser = await db.execute({
+    sql: "SELECT id FROM users WHERE username = ? COLLATE NOCASE LIMIT 1",
+    args: [authInput.username]
+  });
+
+  if (existingUser.rows.length) {
+    sendJson(res, 409, { error: "That username is already taken." });
+    return;
+  }
+
+  const passwordHash = await hashPassword(authInput.password);
+
+  try {
+    const result = await db.execute({
+      sql:
+        "INSERT INTO users (username, display_name, password_hash) VALUES (?, ?, ?)",
+      args: [authInput.username, authInput.displayName, passwordHash]
+    });
+    const userId = Number(result.lastInsertRowid);
+    const user = await getUserById(userId);
+    const token = await createSession(userId);
+
+    setSessionCookie(req, res, token);
+    sendJson(res, 201, { user: serializeUser(user) });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      sendJson(res, 409, { error: "That username is already taken." });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function handleAuthLogin(req, res) {
+  if (!(await ensureAuthReady(res))) {
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  const username = String(body.username || "").trim();
+  const password = String(body.password || "");
+
+  if (!username || !password) {
+    sendJson(res, 400, { error: "Enter your username and password." });
+    return;
+  }
+
+  const db = getDbClient();
+  const result = await db.execute({
+    sql: "SELECT * FROM users WHERE username = ? COLLATE NOCASE LIMIT 1",
+    args: [username]
+  });
+  const row = result.rows[0];
+
+  if (!row || !(await verifyPassword(password, row.password_hash))) {
+    sendJson(res, 401, { error: "Username or password is incorrect." });
+    return;
+  }
+
+  const token = await createSession(row.id);
+  setSessionCookie(req, res, token);
+  sendJson(res, 200, { user: serializeUser(formatUserRow(row)) });
+}
+
+async function handleAuthLogout(req, res) {
+  if (isAuthConfigured()) {
+    const token = getCookie(req, SESSION_COOKIE_NAME);
+
+    if (token) {
+      await ensureDatabaseReady();
+      await getDbClient().execute({
+        sql: "DELETE FROM sessions WHERE id = ?",
+        args: [createSessionHash(token)]
+      });
+    }
+  }
+
+  clearSessionCookie(req, res);
+  sendJson(res, 200, { ok: true });
+}
+
+async function handleProfile(req, res) {
+  const user = await requireCurrentUser(req, res);
+
+  if (!user) {
+    return;
+  }
+
+  const tasteProfile = await getTasteProfile(user.id, 100);
+  sendJson(res, 200, {
+    user: serializeUser(user),
+    tasteProfile
+  });
+}
+
+async function handleGetMovieFeedback(url, req, res) {
+  const user = await requireCurrentUser(req, res);
+
+  if (!user) {
+    return;
+  }
+
+  const status = normalizeFeedbackStatus(url.searchParams.get("status"));
+  const limit = clampNumber(Number(url.searchParams.get("limit") || 100), 1, 200);
+  const db = getDbClient();
+  const args = [user.id];
+  let sql = "SELECT * FROM movie_feedback WHERE user_id = ?";
+
+  if (status) {
+    sql += " AND status = ?";
+    args.push(status);
+  }
+
+  sql += " ORDER BY updated_at DESC LIMIT ?";
+  args.push(limit);
+
+  const result = await db.execute({ sql, args });
+  sendJson(res, 200, {
+    feedback: result.rows.map(formatFeedbackRow)
+  });
+}
+
+async function handleSaveMovieFeedback(req, res) {
+  const user = await requireCurrentUser(req, res);
+
+  if (!user) {
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  const feedback = sanitizeMovieFeedback(body);
+
+  if (!feedback.title) {
+    sendJson(res, 400, { error: "Send a movie title to save feedback." });
+    return;
+  }
+
+  if (!feedback.status) {
+    sendJson(res, 400, {
+      error: "Use one of these statuses: liked, disliked, watched, want_to_watch."
+    });
+    return;
+  }
+
+  const db = getDbClient();
+  const existingFeedback = await findExistingFeedback(user.id, feedback);
+
+  if (existingFeedback) {
+    await db.execute({
+      sql: [
+        "UPDATE movie_feedback",
+        "SET tmdb_id = ?, title = ?, normalized_title = ?, year = ?,",
+        "poster_url = ?, tmdb_url = ?, status = ?, source = ?, note = ?,",
+        "updated_at = CURRENT_TIMESTAMP",
+        "WHERE id = ? AND user_id = ?"
+      ].join(" "),
+      args: [
+        feedback.tmdbId,
+        feedback.title,
+        feedback.normalizedTitle,
+        feedback.year,
+        feedback.posterUrl,
+        feedback.tmdbUrl,
+        feedback.status,
+        feedback.source,
+        feedback.note,
+        existingFeedback.id,
+        user.id
+      ]
+    });
+
+    const savedFeedback = await getFeedbackById(user.id, existingFeedback.id);
+    sendJson(res, 200, { feedback: savedFeedback });
+    return;
+  }
+
+  const result = await db.execute({
+    sql: [
+      "INSERT INTO movie_feedback",
+      "(user_id, tmdb_id, title, normalized_title, year, poster_url, tmdb_url, status, source, note)",
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ].join(" "),
+    args: [
+      user.id,
+      feedback.tmdbId,
+      feedback.title,
+      feedback.normalizedTitle,
+      feedback.year,
+      feedback.posterUrl,
+      feedback.tmdbUrl,
+      feedback.status,
+      feedback.source,
+      feedback.note
+    ]
+  });
+  const savedFeedback = await getFeedbackById(user.id, Number(result.lastInsertRowid));
+
+  sendJson(res, 201, { feedback: savedFeedback });
+}
+
+async function handleDeleteMovieFeedback(url, req, res) {
+  const user = await requireCurrentUser(req, res);
+
+  if (!user) {
+    return;
+  }
+
+  const id = Number(url.searchParams.get("id") || 0);
+  const tmdbId = sanitizeTmdbId(url.searchParams.get("tmdbId"));
+  const title = String(url.searchParams.get("title") || "").trim();
+  const yearMatch = String(url.searchParams.get("year") || "").match(/\d{4}/);
+  const year = yearMatch ? yearMatch[0] : "";
+  const db = getDbClient();
+  let result;
+
+  if (Number.isFinite(id) && id > 0) {
+    result = await db.execute({
+      sql: "DELETE FROM movie_feedback WHERE id = ? AND user_id = ?",
+      args: [id, user.id]
+    });
+  } else if (tmdbId) {
+    result = await db.execute({
+      sql: "DELETE FROM movie_feedback WHERE tmdb_id = ? AND user_id = ?",
+      args: [tmdbId, user.id]
+    });
+  } else if (title) {
+    result = await db.execute({
+      sql:
+        "DELETE FROM movie_feedback WHERE normalized_title = ? AND year = ? AND user_id = ?",
+      args: [normalizeSearchTerm(title), year, user.id]
+    });
+  } else {
+    sendJson(res, 400, { error: "Send a feedback id, tmdbId, or title to delete." });
+    return;
+  }
+
+  sendJson(res, 200, {
+    ok: true,
+    deleted: Number(result.rowsAffected || 0)
+  });
+}
+
+async function generateGeminiPickRecommendations(
+  favoriteMovies,
+  tasteProfile = createEmptyTasteProfile()
+) {
   const pickList = favoriteMovies.map(formatFavoriteMovieLabel).join("; ");
+  const tastePrompt = buildTasteProfilePrompt(tasteProfile);
   const prompt = [
     `The user selected these favorite movies: ${pickList}.`,
+    tastePrompt ? `Saved taste profile: ${tastePrompt}` : "",
     "Based on those picks, recommend exactly three movies they should watch next.",
     "Use the same taste judgment you would use in a normal chat reply.",
     "Avoid sequels, remakes, and obvious repeats unless one is truly the best fit.",
     "For each movie, include a concise spoiler-free description and one quick sentence explaining why it fits those picks.",
     "Return valid JSON only."
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const systemPrompt = [pickRecommendationSystemPrompt, tastePrompt]
+    .filter(Boolean)
+    .join(" ");
 
   const geminiResponse = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -542,7 +914,7 @@ async function generateGeminiPickRecommendations(favoriteMovies) {
       },
       body: JSON.stringify({
         systemInstruction: {
-          parts: [{ text: pickRecommendationSystemPrompt }]
+          parts: [{ text: systemPrompt }]
         },
         contents: [
           {
@@ -858,6 +1230,524 @@ async function fetchTmdbJson(tmdbUrl) {
   }
 
   return data;
+}
+
+function isDatabaseConfigured() {
+  return Boolean(TURSO_DATABASE_URL && TURSO_AUTH_TOKEN);
+}
+
+function isAuthConfigured() {
+  return isDatabaseConfigured() && Boolean(SESSION_SECRET);
+}
+
+async function ensureAuthReady(res) {
+  if (!isDatabaseConfigured()) {
+    sendJson(res, 503, {
+      error: "Accounts are not configured. Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN."
+    });
+    return false;
+  }
+
+  if (!SESSION_SECRET) {
+    sendJson(res, 503, {
+      error: "Login sessions are not configured. Add SESSION_SECRET."
+    });
+    return false;
+  }
+
+  await ensureDatabaseReady();
+  return true;
+}
+
+function getDbClient() {
+  if (!isDatabaseConfigured()) {
+    throw new Error("Turso database is not configured.");
+  }
+
+  if (!dbClient) {
+    dbClient = createClient({
+      url: TURSO_DATABASE_URL,
+      authToken: TURSO_AUTH_TOKEN
+    });
+  }
+
+  return dbClient;
+}
+
+function ensureDatabaseReady() {
+  if (!databaseReadyPromise) {
+    databaseReadyPromise = initializeDatabase().catch((error) => {
+      databaseReadyPromise = null;
+      throw error;
+    });
+  }
+
+  return databaseReadyPromise;
+}
+
+async function initializeDatabase() {
+  const db = getDbClient();
+
+  await db.batch(
+    [
+      "PRAGMA foreign_keys = ON",
+      [
+        "CREATE TABLE IF NOT EXISTS users (",
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+        "username TEXT NOT NULL UNIQUE COLLATE NOCASE,",
+        "display_name TEXT NOT NULL,",
+        "password_hash TEXT NOT NULL,",
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        ")"
+      ].join(" "),
+      [
+        "CREATE TABLE IF NOT EXISTS sessions (",
+        "id TEXT PRIMARY KEY,",
+        "user_id INTEGER NOT NULL,",
+        "expires_at TEXT NOT NULL,",
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+        "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+        ")"
+      ].join(" "),
+      [
+        "CREATE TABLE IF NOT EXISTS movie_feedback (",
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+        "user_id INTEGER NOT NULL,",
+        "tmdb_id TEXT,",
+        "title TEXT NOT NULL,",
+        "normalized_title TEXT NOT NULL,",
+        "year TEXT,",
+        "poster_url TEXT,",
+        "tmdb_url TEXT,",
+        "status TEXT NOT NULL CHECK (status IN ('liked', 'disliked', 'watched', 'want_to_watch')),",
+        "source TEXT NOT NULL DEFAULT 'manual',",
+        "note TEXT,",
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+        "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+        "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+        ")"
+      ].join(" "),
+      "CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id)",
+      "CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at)",
+      "CREATE INDEX IF NOT EXISTS movie_feedback_user_status_idx ON movie_feedback(user_id, status)",
+      "CREATE INDEX IF NOT EXISTS movie_feedback_user_tmdb_idx ON movie_feedback(user_id, tmdb_id)",
+      "CREATE INDEX IF NOT EXISTS movie_feedback_user_title_idx ON movie_feedback(user_id, normalized_title, year)"
+    ],
+    "write"
+  );
+}
+
+async function requireCurrentUser(req, res) {
+  if (!(await ensureAuthReady(res))) {
+    return null;
+  }
+
+  const user = await getOptionalCurrentUser(req);
+
+  if (!user) {
+    sendJson(res, 401, { error: "Log in to use this endpoint." });
+    return null;
+  }
+
+  return user;
+}
+
+async function getOptionalCurrentUser(req) {
+  if (!isAuthConfigured()) {
+    return null;
+  }
+
+  const token = getCookie(req, SESSION_COOKIE_NAME);
+
+  if (!token) {
+    return null;
+  }
+
+  await ensureDatabaseReady();
+
+  const result = await getDbClient().execute({
+    sql: [
+      "SELECT users.* FROM sessions",
+      "JOIN users ON users.id = sessions.user_id",
+      "WHERE sessions.id = ? AND sessions.expires_at > CURRENT_TIMESTAMP",
+      "LIMIT 1"
+    ].join(" "),
+    args: [createSessionHash(token)]
+  });
+
+  return result.rows[0] ? formatUserRow(result.rows[0]) : null;
+}
+
+async function getUserById(userId) {
+  const result = await getDbClient().execute({
+    sql: "SELECT * FROM users WHERE id = ? LIMIT 1",
+    args: [userId]
+  });
+
+  return result.rows[0] ? formatUserRow(result.rows[0]) : null;
+}
+
+function formatUserRow(row) {
+  return {
+    id: Number(row.id),
+    username: String(row.username || ""),
+    displayName: String(row.display_name || row.displayName || row.username || ""),
+    createdAt: String(row.created_at || row.createdAt || "")
+  };
+}
+
+function serializeUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    createdAt: user.createdAt
+  };
+}
+
+function sanitizeAuthInput(body) {
+  const username = String(body.username || "")
+    .trim()
+    .toLowerCase();
+  const displayName = String(body.displayName || body.display_name || username)
+    .trim()
+    .slice(0, 40);
+  const password = String(body.password || "");
+  const validUsername = /^[a-z0-9_-]{3,32}$/.test(username) ? username : "";
+  const validPassword =
+    password.length >= 8 && password.length <= 128 ? password : "";
+
+  return {
+    username: validUsername,
+    displayName: displayName || validUsername,
+    password: validPassword
+  };
+}
+
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const key = await scryptAsync(password, salt, PASSWORD_KEY_LENGTH);
+  return `scrypt$${salt}$${key.toString("hex")}`;
+}
+
+async function verifyPassword(password, passwordHash) {
+  const [scheme, salt, storedHash] = String(passwordHash || "").split("$");
+
+  if (scheme !== "scrypt" || !salt || !storedHash) {
+    return false;
+  }
+
+  const storedBuffer = Buffer.from(storedHash, "hex");
+  const key = await scryptAsync(password, salt, storedBuffer.length);
+
+  if (key.length !== storedBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(key, storedBuffer);
+}
+
+async function createSession(userId) {
+  const token = crypto.randomBytes(32).toString("base64url");
+
+  await getDbClient().execute({
+    sql:
+      "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 days'))",
+    args: [createSessionHash(token), userId]
+  });
+
+  return token;
+}
+
+function createSessionHash(token) {
+  return crypto
+    .createHmac("sha256", SESSION_SECRET)
+    .update(String(token || ""))
+    .digest("hex");
+}
+
+function getCookie(req, name) {
+  const cookies = String(req.headers.cookie || "")
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .filter(Boolean);
+
+  for (const cookie of cookies) {
+    const separatorIndex = cookie.indexOf("=");
+
+    if (separatorIndex === -1) {
+      continue;
+    }
+
+    const cookieName = cookie.slice(0, separatorIndex);
+
+    if (cookieName === name) {
+      return decodeURIComponent(cookie.slice(separatorIndex + 1));
+    }
+  }
+
+  return "";
+}
+
+function setSessionCookie(req, res, token) {
+  const maxAgeSeconds = Math.floor(SESSION_DURATION_MS / 1000);
+  const cookieParts = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${maxAgeSeconds}`
+  ];
+
+  if (isSecureRequest(req)) {
+    cookieParts.push("Secure");
+  }
+
+  res.setHeader("Set-Cookie", cookieParts.join("; "));
+}
+
+function clearSessionCookie(req, res) {
+  const cookieParts = [
+    `${SESSION_COOKIE_NAME}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0"
+  ];
+
+  if (isSecureRequest(req)) {
+    cookieParts.push("Secure");
+  }
+
+  res.setHeader("Set-Cookie", cookieParts.join("; "));
+}
+
+function isSecureRequest(req) {
+  return (
+    req.headers["x-forwarded-proto"] === "https" ||
+    req.headers["x-forwarded-ssl"] === "on" ||
+    Boolean(req.socket.encrypted)
+  );
+}
+
+async function getTasteProfile(userId, limit = TASTE_PROMPT_LIMIT) {
+  const result = await getDbClient().execute({
+    sql:
+      "SELECT * FROM movie_feedback WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
+    args: [userId, limit]
+  });
+  const feedback = result.rows.map(formatFeedbackRow);
+
+  return {
+    feedback,
+    liked: feedback.filter((movie) => movie.status === "liked"),
+    disliked: feedback.filter((movie) => movie.status === "disliked"),
+    watched: feedback.filter((movie) =>
+      ["liked", "disliked", "watched"].includes(movie.status)
+    ),
+    wantToWatch: feedback.filter((movie) => movie.status === "want_to_watch")
+  };
+}
+
+function createEmptyTasteProfile() {
+  return {
+    feedback: [],
+    liked: [],
+    disliked: [],
+    watched: [],
+    wantToWatch: []
+  };
+}
+
+function formatFeedbackRow(row) {
+  const tmdbId = Number(row.tmdb_id || row.tmdbId || 0);
+
+  return {
+    id: Number(row.id),
+    tmdbId: Number.isFinite(tmdbId) && tmdbId > 0 ? tmdbId : null,
+    title: String(row.title || ""),
+    year: String(row.year || ""),
+    posterUrl: String(row.poster_url || row.posterUrl || ""),
+    tmdbUrl: String(row.tmdb_url || row.tmdbUrl || ""),
+    status: String(row.status || ""),
+    source: String(row.source || ""),
+    note: String(row.note || ""),
+    createdAt: String(row.created_at || row.createdAt || ""),
+    updatedAt: String(row.updated_at || row.updatedAt || "")
+  };
+}
+
+function sanitizeMovieFeedback(body) {
+  const title = String(body.title || body.movie?.title || "")
+    .trim()
+    .slice(0, 120);
+  const yearMatch = String(body.year || body.movie?.year || "").match(/\d{4}/);
+  const year = yearMatch ? yearMatch[0] : "";
+  const status = normalizeFeedbackStatus(body.status || body.reaction);
+  const source = String(body.source || "manual")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .slice(0, 40);
+
+  return {
+    tmdbId: sanitizeTmdbId(body.tmdbId ?? body.tmdb_id ?? body.id ?? body.movie?.id),
+    title,
+    normalizedTitle: normalizeSearchTerm(title),
+    year,
+    posterUrl: sanitizeOptionalUrl(body.posterUrl || body.poster_url || ""),
+    tmdbUrl: sanitizeOptionalUrl(body.tmdbUrl || body.tmdb_url || ""),
+    status,
+    source: source || "manual",
+    note: String(body.note || "").trim().slice(0, 280)
+  };
+}
+
+function normalizeFeedbackStatus(value) {
+  const status = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+
+  if (["success", "watched_liked", "watch_liked"].includes(status)) {
+    return "liked";
+  }
+
+  if (["watched_disliked", "watch_disliked"].includes(status)) {
+    return "disliked";
+  }
+
+  return FEEDBACK_STATUS_VALUES.has(status) ? status : "";
+}
+
+function sanitizeTmdbId(value) {
+  const tmdbId = Number(value);
+
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
+    return null;
+  }
+
+  return String(Math.trunc(tmdbId));
+}
+
+function sanitizeOptionalUrl(value) {
+  const url = String(value || "").trim().slice(0, 500);
+  return /^https?:\/\//i.test(url) ? url : "";
+}
+
+async function findExistingFeedback(userId, feedback) {
+  if (feedback.tmdbId) {
+    const byTmdbId = await getDbClient().execute({
+      sql: "SELECT id FROM movie_feedback WHERE user_id = ? AND tmdb_id = ? LIMIT 1",
+      args: [userId, feedback.tmdbId]
+    });
+
+    if (byTmdbId.rows[0]) {
+      return byTmdbId.rows[0];
+    }
+  }
+
+  const byTitle = await getDbClient().execute({
+    sql: [
+      "SELECT id FROM movie_feedback",
+      "WHERE user_id = ? AND normalized_title = ? AND year = ?",
+      "LIMIT 1"
+    ].join(" "),
+    args: [userId, feedback.normalizedTitle, feedback.year]
+  });
+
+  return byTitle.rows[0] || null;
+}
+
+async function getFeedbackById(userId, feedbackId) {
+  const result = await getDbClient().execute({
+    sql: "SELECT * FROM movie_feedback WHERE user_id = ? AND id = ? LIMIT 1",
+    args: [userId, feedbackId]
+  });
+
+  return result.rows[0] ? formatFeedbackRow(result.rows[0]) : null;
+}
+
+function buildChatSystemPrompt(favoriteMovies, tasteProfile) {
+  const promptParts = [movieSystemPrompt];
+  const tastePrompt = buildTasteProfilePrompt(tasteProfile);
+
+  if (favoriteMovies.length) {
+    promptParts.push(
+      `The user selected these favorite movies: ${favoriteMovies.join(
+        ", "
+      )}. Use them as taste signals when they ask for recommendations.`
+    );
+  }
+
+  if (tastePrompt) {
+    promptParts.push(`Saved taste profile: ${tastePrompt}`);
+  }
+
+  return promptParts.join(" ");
+}
+
+function buildTasteProfilePrompt(tasteProfile) {
+  if (!tasteProfile?.feedback?.length) {
+    return "";
+  }
+
+  const watchedOnly = tasteProfile.feedback.filter(
+    (movie) => movie.status === "watched"
+  );
+  const parts = [];
+
+  if (tasteProfile.liked.length) {
+    parts.push(`Liked: ${formatProfileMovieList(tasteProfile.liked)}.`);
+  }
+
+  if (tasteProfile.disliked.length) {
+    parts.push(`Disliked: ${formatProfileMovieList(tasteProfile.disliked)}.`);
+  }
+
+  if (watchedOnly.length) {
+    parts.push(`Watched: ${formatProfileMovieList(watchedOnly)}.`);
+  }
+
+  if (tasteProfile.wantToWatch.length) {
+    parts.push(
+      `Interested in watching: ${formatProfileMovieList(tasteProfile.wantToWatch)}.`
+    );
+  }
+
+  if (tasteProfile.watched.length || tasteProfile.disliked.length) {
+    parts.push(
+      "Avoid recommending disliked or already watched movies unless the user asks for repeats."
+    );
+  }
+
+  return parts.join(" ");
+}
+
+function formatProfileMovieList(movies) {
+  return movies.slice(0, TASTE_PROMPT_LIMIT).map(formatFeedbackMovieLabel).join(", ");
+}
+
+function formatFeedbackMovieLabel(movie) {
+  return movie.year ? `${movie.title} (${movie.year})` : movie.title;
+}
+
+function getTasteExcludedMovies(tasteProfile) {
+  return (tasteProfile?.feedback || [])
+    .filter((movie) => ["liked", "disliked", "watched"].includes(movie.status))
+    .map((movie) => ({
+      id: movie.tmdbId || "",
+      title: movie.title,
+      year: movie.year
+    }));
+}
+
+function isUniqueConstraintError(error) {
+  return /constraint|unique/i.test(String(error?.message || error));
 }
 
 function findGenreMatch(query) {
@@ -1340,7 +2230,12 @@ function getTmdbRequestOptions(tmdbUrl) {
 function cleanSecret(value) {
   const secret = String(value || "").trim();
 
-  if (!secret || /^your_.+_here$/i.test(secret)) {
+  if (
+    !secret ||
+    /^your_.+_here$/i.test(secret) ||
+    /^replace_with_/i.test(secret) ||
+    /^optional_/i.test(secret)
+  ) {
     return "";
   }
 

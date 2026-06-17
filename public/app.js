@@ -18,6 +18,26 @@ const relatedResultsClose = document.querySelector("#related-results-close");
 const relatedResultsTitle = document.querySelector("#related-results-title");
 const relatedResultsStatus = document.querySelector("#related-results-status");
 const relatedResultsGrid = document.querySelector("#related-results-grid");
+const accountButton = document.querySelector("#account-button");
+const accountModal = document.querySelector("#account-modal");
+const accountClose = document.querySelector("#account-close");
+const accountTitle = document.querySelector("#account-title");
+const accountSignedOut = document.querySelector("#account-signed-out");
+const accountSignedIn = document.querySelector("#account-signed-in");
+const accountGreeting = document.querySelector("#account-greeting");
+const accountForm = document.querySelector("#account-form");
+const accountUsername = document.querySelector("#account-username");
+const accountDisplayName = document.querySelector("#account-display-name");
+const accountPassword = document.querySelector("#account-password");
+const accountInviteCode = document.querySelector("#account-invite-code");
+const accountSubmit = document.querySelector("#account-submit");
+const accountStatus = document.querySelector("#account-status");
+const accountProfileStatus = document.querySelector("#account-profile-status");
+const accountLogoutButton = document.querySelector("#account-logout-button");
+const accountModeButtons = Array.from(document.querySelectorAll("[data-auth-mode]"));
+const accountRegisterOnlyFields = Array.from(
+  document.querySelectorAll("[data-register-only]")
+);
 
 const fallbackWallPosters = [
   {
@@ -91,6 +111,13 @@ let posterWallLayoutKey = "";
 let posterWallColumns = [];
 let posterWallAnimationFrame = 0;
 let posterWallLastTimestamp = 0;
+let accountMode = "login";
+let accountReturnFocus = accountButton;
+let authState = {
+  authConfigured: null,
+  user: null
+};
+let isAuthLoading = false;
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -179,6 +206,17 @@ movieSearchInput.addEventListener("keydown", (event) => {
 
 movieSearchClose.addEventListener("click", closeMoviePicker);
 relatedResultsClose.addEventListener("click", closeRelatedResults);
+accountButton.addEventListener("click", () => openAccountModal(accountButton));
+accountClose.addEventListener("click", closeAccountModal);
+
+accountModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setAccountMode(button.dataset.authMode);
+  });
+});
+
+accountForm.addEventListener("submit", handleAccountSubmit);
+accountLogoutButton.addEventListener("click", handleAccountLogout);
 
 movieSearchModal.addEventListener("click", (event) => {
   if (event.target === movieSearchModal) {
@@ -192,6 +230,12 @@ relatedResultsModal.addEventListener("click", (event) => {
   }
 });
 
+accountModal.addEventListener("click", (event) => {
+  if (event.target === accountModal) {
+    closeAccountModal();
+  }
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !movieSearchModal.hidden) {
     closeMoviePicker();
@@ -200,6 +244,11 @@ document.addEventListener("keydown", (event) => {
 
   if (event.key === "Escape" && !relatedResultsModal.hidden) {
     closeRelatedResults();
+    return;
+  }
+
+  if (event.key === "Escape" && !accountModal.hidden) {
+    closeAccountModal();
   }
 });
 
@@ -228,6 +277,8 @@ genreActorForm.addEventListener("submit", (event) => {
 
 renderPosterSlots();
 loadPosterWall();
+setAccountMode("login");
+loadAuthState();
 
 if (posterWall) {
   window.addEventListener("resize", schedulePosterWallRender);
@@ -1078,7 +1129,10 @@ function renderRelatedMovieDetail() {
     : selectedRelatedMovie.title;
 
   const description = document.createElement("p");
-  description.textContent = selectedRelatedMovie.description || selectedRelatedMovie.overview || "No synopsis available.";
+  description.textContent =
+    selectedRelatedMovie.description ||
+    selectedRelatedMovie.overview ||
+    "No synopsis available.";
 
   descriptionCopy.append(title);
 
@@ -1167,7 +1221,7 @@ async function fetchMovieProviders(movieId) {
   const response = await fetch(
     `/api/movies/providers?movieId=${encodeURIComponent(movieId)}`
   );
-  const data = await response.json();
+  const data = await readJsonResponse(response);
 
   if (!response.ok) {
     throw new Error(data.error || "Provider lookup failed.");
@@ -1195,7 +1249,8 @@ function createProviderSection(movie) {
     const section = document.createElement("div");
     section.className = "related-movie-providers";
     const noAvailability = document.createElement("p");
-    noAvailability.textContent = "Streaming availability could not be loaded right now.";
+    noAvailability.textContent =
+      "Streaming availability could not be loaded right now.";
     section.append(noAvailability);
     return section;
   }
@@ -1255,6 +1310,271 @@ function closeRelatedResults() {
   if (relatedResultsReturnFocus?.focus) {
     relatedResultsReturnFocus.focus();
   }
+}
+
+async function loadAuthState() {
+  try {
+    const response = await fetch("/api/auth/me");
+    const data = await readJsonResponse(response);
+
+    if (!response.ok) {
+      throw new Error(data.error || "Could not check account status.");
+    }
+
+    authState = {
+      authConfigured: Boolean(data.authConfigured),
+      user: data.user || null
+    };
+  } catch (error) {
+    authState = {
+      authConfigured: null,
+      user: null
+    };
+  }
+
+  renderAccountState();
+}
+
+function openAccountModal(returnFocusElement = accountButton) {
+  accountReturnFocus = returnFocusElement || accountButton;
+  accountModal.hidden = false;
+  document.body.classList.add("account-open");
+  renderAccountState();
+
+  if (authState.authConfigured === null) {
+    accountStatus.textContent = "Checking account...";
+    loadAuthState();
+  }
+
+  window.requestAnimationFrame(() => {
+    if (authState.user) {
+      accountLogoutButton.focus();
+      return;
+    }
+
+    if (!accountUsername.disabled) {
+      accountUsername.focus();
+    }
+  });
+}
+
+function closeAccountModal() {
+  accountModal.hidden = true;
+  accountStatus.textContent = "";
+  accountProfileStatus.textContent = "";
+  document.body.classList.remove("account-open");
+
+  if (accountReturnFocus?.focus) {
+    accountReturnFocus.focus();
+  }
+}
+
+function setAccountMode(mode, options = {}) {
+  accountMode = mode === "register" ? "register" : "login";
+
+  accountModeButtons.forEach((button) => {
+    const isActive = button.dataset.authMode === accountMode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  accountRegisterOnlyFields.forEach((field) => {
+    field.hidden = accountMode !== "register";
+  });
+
+  accountTitle.textContent = accountMode === "register" ? "Create account" : "Login";
+  accountSubmit.textContent = accountMode === "register" ? "Create account" : "Login";
+  accountPassword.autocomplete =
+    accountMode === "register" ? "new-password" : "current-password";
+
+  if (accountMode === "register") {
+    accountPassword.setAttribute("minlength", "8");
+  } else {
+    accountPassword.removeAttribute("minlength");
+  }
+
+  if (!options.preserveStatus) {
+    accountStatus.textContent = "";
+  }
+
+  updateAccountControlsDisabled();
+}
+
+function renderAccountState() {
+  const user = authState.user;
+
+  accountButton.textContent = user
+    ? `Hi, ${shortenAccountName(getAccountDisplayName(user))}`
+    : "Login / Create Account";
+
+  accountSignedOut.hidden = Boolean(user);
+  accountSignedIn.hidden = !user;
+
+  if (user) {
+    accountTitle.textContent = "Account";
+    accountGreeting.textContent = `Signed in as ${getAccountDisplayName(user)}.`;
+  } else {
+    setAccountMode(accountMode, { preserveStatus: true });
+  }
+
+  if (!user && authState.authConfigured === false) {
+    accountStatus.textContent = "Accounts are not configured yet.";
+  }
+
+  updateAccountControlsDisabled();
+}
+
+async function handleAccountSubmit(event) {
+  event.preventDefault();
+
+  if (isAuthLoading) {
+    return;
+  }
+
+  if (authState.authConfigured === false) {
+    accountStatus.textContent = "Accounts are not configured yet.";
+    return;
+  }
+
+  const isRegister = accountMode === "register";
+  const username = accountUsername.value.trim();
+  const password = accountPassword.value;
+
+  if (!username || !password) {
+    accountStatus.textContent = "Enter your username and password.";
+    return;
+  }
+
+  const payload = { username, password };
+
+  if (isRegister) {
+    payload.displayName = accountDisplayName.value.trim();
+    payload.inviteCode = accountInviteCode.value.trim();
+  }
+
+  let signedIn = false;
+  setAuthLoading(true);
+  accountStatus.textContent = isRegister ? "Creating account..." : "Logging in...";
+
+  try {
+    const response = await fetch(`/api/auth/${isRegister ? "register" : "login"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await readJsonResponse(response);
+
+    if (!response.ok) {
+      throw new Error(data.error || "Account request failed.");
+    }
+
+    if (!data.user) {
+      throw new Error("Account request finished without a user.");
+    }
+
+    authState = {
+      authConfigured: true,
+      user: data.user
+    };
+    accountForm.reset();
+    renderAccountState();
+    accountProfileStatus.textContent = isRegister ? "Account created." : "Logged in.";
+    signedIn = true;
+  } catch (error) {
+    accountStatus.textContent = error.message;
+  } finally {
+    setAuthLoading(false);
+
+    if (signedIn) {
+      window.requestAnimationFrame(() => accountLogoutButton.focus());
+    }
+  }
+}
+
+async function handleAccountLogout() {
+  if (isAuthLoading) {
+    return;
+  }
+
+  let signedOut = false;
+  setAuthLoading(true);
+  accountProfileStatus.textContent = "Logging out...";
+
+  try {
+    const response = await fetch("/api/auth/logout", { method: "POST" });
+    const data = await readJsonResponse(response);
+
+    if (!response.ok) {
+      throw new Error(data.error || "Logout failed.");
+    }
+
+    authState = {
+      authConfigured: true,
+      user: null
+    };
+    accountForm.reset();
+    setAccountMode("login", { preserveStatus: true });
+    renderAccountState();
+    accountStatus.textContent = "Logged out.";
+    signedOut = true;
+  } catch (error) {
+    accountProfileStatus.textContent = error.message;
+  } finally {
+    setAuthLoading(false);
+
+    if (signedOut) {
+      window.requestAnimationFrame(() => accountUsername.focus());
+    }
+  }
+}
+
+function setAuthLoading(isLoading) {
+  isAuthLoading = isLoading;
+  updateAccountControlsDisabled();
+}
+
+function updateAccountControlsDisabled() {
+  const formDisabled = isAuthLoading || authState.authConfigured === false;
+
+  Array.from(accountForm.elements).forEach((element) => {
+    element.disabled = formDisabled;
+  });
+
+  accountModeButtons.forEach((button) => {
+    button.disabled = isAuthLoading;
+  });
+
+  accountButton.disabled = isAuthLoading;
+  accountLogoutButton.disabled = isAuthLoading;
+
+  if (!isAuthLoading) {
+    accountSubmit.textContent = accountMode === "register" ? "Create account" : "Login";
+    return;
+  }
+
+  accountSubmit.textContent = accountMode === "register" ? "Creating..." : "Logging in...";
+}
+
+async function readJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    return {};
+  }
+}
+
+function getAccountDisplayName(user) {
+  return String(user?.displayName || user?.username || "Movie fan").trim();
+}
+
+function shortenAccountName(name) {
+  const normalizedName = String(name || "Movie fan").trim();
+
+  if (normalizedName.length <= 18) {
+    return normalizedName;
+  }
+
+  return `${normalizedName.slice(0, 15)}...`;
 }
 
 function closeResults() {

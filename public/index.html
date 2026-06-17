@@ -10,6 +10,12 @@
     <div class="poster-wall" id="poster-wall" aria-hidden="true"></div>
 
     <main class="theater-shell">
+      <div class="account-corner">
+        <button class="account-button" id="account-button" type="button">
+          Login / Create Account
+        </button>
+      </div>
+
       <section class="marquee" aria-labelledby="site-title">
         <h1 class="marquee-title" id="site-title">Need a Rec?</h1>
       </section>
@@ -129,6 +135,98 @@
 
         <p class="related-results-status" id="related-results-status" role="status"></p>
         <div class="related-results-grid" id="related-results-grid"></div>
+      </section>
+    </div>
+
+    <div class="account-modal" id="account-modal" hidden>
+      <section
+        class="account-popover"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-title"
+      >
+        <div class="account-topline">
+          <h2 id="account-title">Account</h2>
+          <button
+            class="account-close"
+            id="account-close"
+            type="button"
+            aria-label="Close account"
+          >x</button>
+        </div>
+
+        <div class="account-panel" id="account-signed-out">
+          <div class="account-tabs" role="tablist" aria-label="Account action">
+            <button
+              class="account-tab is-active"
+              id="account-login-tab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              data-auth-mode="login"
+            >Login</button>
+            <button
+              class="account-tab"
+              id="account-register-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-auth-mode="register"
+            >Create Account</button>
+          </div>
+
+          <form class="account-form" id="account-form">
+            <label for="account-username">Username</label>
+            <input
+              id="account-username"
+              name="username"
+              type="text"
+              autocomplete="username"
+              required
+            >
+
+            <label data-register-only for="account-display-name">Display name</label>
+            <input
+              data-register-only
+              id="account-display-name"
+              name="displayName"
+              type="text"
+              autocomplete="name"
+            >
+
+            <label for="account-password">Password</label>
+            <input
+              id="account-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            >
+
+            <label data-register-only for="account-invite-code">Invite code</label>
+            <input
+              data-register-only
+              id="account-invite-code"
+              name="inviteCode"
+              type="text"
+              autocomplete="off"
+            >
+
+            <button class="account-submit" id="account-submit" type="submit">
+              Login
+            </button>
+          </form>
+
+          <p class="account-status" id="account-status" role="status"></p>
+        </div>
+
+        <div class="account-panel account-signed-in" id="account-signed-in" hidden>
+          <p class="account-greeting" id="account-greeting"></p>
+          <button class="account-logout-button" id="account-logout-button" type="button">
+            Log out
+          </button>
+          <p class="account-status" id="account-profile-status" role="status"></p>
+        </div>
       </section>
     </div>
 
