@@ -12,6 +12,20 @@ Need a movie suggestion? This repository contains a small Node.js web app that s
 
 This app is a work-in-progress but the core recommendation flows are implemented, including a pick-based recommendation flow that combines Gemini output (when available) with TMDB-backed enrichment.
 
+## System architecture
+
+### Overall system
+
+![Overall system architecture](docs/architecture/overall-system-architecture.png)
+
+### Backend flow
+
+![Backend flow](docs/architecture/backend-flow.png)
+
+### UX flow
+
+![UX flow](docs/architecture/ux-flow.png)
+
 ## Features
 
 - Chat-based movie recommendations via Gemini (when `GEMINI_API_KEY` is set).

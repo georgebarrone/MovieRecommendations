@@ -7,9 +7,11 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
+    <!-- The poster wall is decorative background art that is populated and animated by app.js. -->
     <div class="poster-wall" id="poster-wall" aria-hidden="true"></div>
 
     <main class="theater-shell" id="home-view">
+      <!-- The account corner exposes login, profile, watchlist, and logout actions. -->
       <div class="account-corner">
         <button
           class="account-button"
@@ -34,11 +36,14 @@
         </div>
       </div>
 
+      <!-- The marquee provides the main title treatment for the theater-themed interface. -->
       <section class="marquee" aria-labelledby="site-title">
         <h1 class="marquee-title" id="site-title">Need a Rec?</h1>
       </section>
 
+      <!-- The stage stack contains the main recommendation controls and chat surface. -->
       <div class="stage-stack">
+        <!-- The mood section lets users pick up to four movies as taste signals. -->
         <section class="mood-section" aria-labelledby="mood-title">
           <h2 id="mood-title">What's your movie mood?</h2>
 
@@ -63,6 +68,7 @@
           </p>
         </section>
 
+        <!-- The genre section searches TMDB by genre phrase or actor name. -->
         <section class="genre-section" aria-labelledby="genre-title">
           <h2 id="genre-title">Search by genre or actor</h2>
           <form class="genre-actor-form" id="genre-actor-form">
@@ -78,6 +84,7 @@
           </form>
         </section>
 
+        <!-- The chat panel sends natural-language recommendation requests to the server. -->
         <section class="chat-panel" aria-labelledby="chat-title">
           <header class="chat-header">
             <h2 id="chat-title">Chat with us</h2>
@@ -108,6 +115,7 @@
       </div>
     </main>
 
+    <!-- The movie search modal lets users fill a poster slot from TMDB title results. -->
     <div class="movie-search-modal" id="movie-search-modal" hidden>
       <section
         class="movie-search-popover"
@@ -144,6 +152,7 @@
       </section>
     </div>
 
+    <!-- The related results modal shows genre, actor, and pick-based movie matches. -->
     <div class="related-results-modal" id="related-results-modal" hidden>
       <section
         class="related-results-popover"
@@ -176,6 +185,7 @@
       </section>
     </div>
 
+    <!-- The account modal handles login and account creation without leaving the page. -->
     <div class="account-modal" id="account-modal" hidden>
       <section
         class="account-popover"
@@ -268,6 +278,7 @@
       </section>
     </div>
 
+    <!-- The watchlist page is a hash-routed library view for movies saved as want-to-watch. -->
     <main class="watchlist-page" id="watchlist-page" hidden>
       <div class="watchlist-page-shell">
         <header class="watchlist-page-header">
@@ -284,6 +295,7 @@
       </div>
     </main>
 
+    <!-- The taste profile modal displays saved likes and dislikes used by recommendations. -->
     <div class="taste-profile-modal" id="taste-profile-modal" hidden>
       <section
         class="library-popover taste-profile-popover"
@@ -315,6 +327,7 @@
       </section>
     </div>
 
+    <!-- The movie feedback modal moves watchlist movies into liked or disliked feedback. -->
     <div class="movie-feedback-modal" id="movie-feedback-modal" hidden>
       <section
         class="movie-feedback-popover"
@@ -345,6 +358,7 @@
       </section>
     </div>
 
+    <!-- The browser app script wires the static markup to API calls and UI state. -->
     <script src="/app.js"></script>
   </body>
 </html>

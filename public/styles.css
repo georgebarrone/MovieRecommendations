@@ -1,3 +1,4 @@
+/* Font faces load the theater display type and the monospace body type used across the app. */
 @font-face {
   font-family: "Limelight";
   src: url("/fonts/Limelight-1XzM.ttf") format("truetype");
@@ -14,6 +15,7 @@
   font-display: swap;
 }
 
+/* Theme tokens centralize colors, fonts, shadows, and reusable film-strip geometry. */
 :root {
   color-scheme: dark;
   --display-font: "Limelight", Georgia, "Times New Roman", serif;
@@ -44,6 +46,7 @@
   --stage-film-height: 24px;
 }
 
+/* Global layout defaults keep sizing predictable and typography consistent. */
 * {
   box-sizing: border-box;
 }
@@ -64,6 +67,7 @@ body {
   letter-spacing: 0;
 }
 
+/* The fixed body overlay darkens the animated poster wall so foreground content remains readable. */
 body::before {
   position: fixed;
   inset: 0;
@@ -75,12 +79,14 @@ body::before {
     linear-gradient(90deg, rgba(0, 0, 0, 0.42), transparent 13% 87%, rgba(0, 0, 0, 0.42));
 }
 
+/* Body state classes prevent background scrolling while overlays or library views are open. */
 body.search-open,
 body.account-open,
 body.library-open {
   overflow: hidden;
 }
 
+/* The poster wall styles build the blurred animated movie-poster background. */
 .poster-wall {
   position: fixed;
   --poster-wall-columns: 28;
@@ -149,6 +155,7 @@ body.library-open {
   object-fit: cover;
 }
 
+/* Form controls inherit the app typography so native inputs match the custom theme. */
 button,
 input,
 textarea {
@@ -168,6 +175,7 @@ p {
   margin-top: 0;
 }
 
+/* The theater shell centers the main home experience above the poster wall. */
 .theater-shell {
   position: relative;
   z-index: 2;
@@ -177,6 +185,7 @@ p {
   padding: 0;
 }
 
+/* Account controls sit above the marquee and expose the signed-in menu. */
 .account-corner {
   position: relative;
   display: flex;
@@ -229,6 +238,7 @@ p {
   outline: none;
 }
 
+/* The marquee uses layered gradients to imitate a film-strip sign behind the title. */
 .marquee {
   position: relative;
   --marquee-edge: clamp(20px, 2.8vw, 32px); 
@@ -297,6 +307,7 @@ p {
   text-wrap: balance;
 }
 
+/* The stage stack frames the main tools inside a glassy film-strip panel. */
 .stage-stack {
   position: relative;
   z-index: 1;
@@ -360,6 +371,7 @@ p {
   z-index: 1;
 }
 
+/* Shared heading and section styles keep the mood, genre, and chat areas visually aligned. */
 h2 {
   margin-bottom: 18px;
   color: var(--ink);
@@ -406,6 +418,7 @@ h2 {
   border-bottom: 1px solid rgba(255, 255, 255, 0.42);
 }
 
+/* The poster grid lays out the four movie-pick slots used as recommendation signals. */
 .poster-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(88px, 124px));
@@ -419,6 +432,7 @@ h2 {
   min-width: 0;
 }
 
+/* Poster add and filled states share the same fixed movie-poster frame geometry. */
 .poster-add-button,
 .poster-frame {
   position: relative;
@@ -520,6 +534,7 @@ h2 {
   outline: none;
 }
 
+/* Film-strip buttons share one visual system across search, account, watchlist, and feedback actions. */
 .pick-search-button,
 .pick-results-button,
 .account-button,
@@ -572,6 +587,7 @@ h2 {
   backdrop-filter: blur(6px);
 }
 
+/* Mood actions hold the primary pick-based recommendation button and cached-results button. */
 .mood-actions {
   display: flex;
   flex-wrap: wrap;
@@ -649,6 +665,7 @@ h2 {
   margin-bottom: 14px;
 }
 
+/* Genre and chat forms use compact grid layouts that collapse cleanly on mobile. */
 .genre-actor-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -657,6 +674,7 @@ h2 {
   margin: 0 auto;
 }
 
+/* Text inputs reuse the same film-strip surface as the buttons for visual consistency. */
 input,
 textarea {
   width: 100%;
@@ -726,6 +744,7 @@ textarea:focus {
     0 0 0 3px rgba(255, 255, 255, 0.16);
 }
 
+/* The chat panel styles message history, avatars, bubbles, and the composer layout. */
 .chat-panel {
   min-width: 0;
   font-family: "Courier Prime", "Courier New", monospace;
@@ -830,6 +849,7 @@ textarea:focus {
   margin-top: 12px;
 }
 
+/* Disabled interactive controls stay visibly inactive during network requests. */
 .pick-search-button:disabled,
 .pick-results-button:disabled,
 .account-button:disabled,
@@ -845,6 +865,7 @@ textarea:focus {
   opacity: 0.65;
 }
 
+/* Hidden modal and page states are centralized so JavaScript can toggle one attribute. */
 .movie-search-modal[hidden],
 .related-results-modal[hidden],
 .account-modal[hidden],
@@ -854,6 +875,7 @@ textarea:focus {
   display: none;
 }
 
+/* Modal overlays share fixed positioning, backdrop blur, and top spacing. */
 .movie-search-modal,
 .related-results-modal,
 .account-modal,
@@ -869,6 +891,7 @@ textarea:focus {
   backdrop-filter: blur(4px);
 }
 
+/* Popover shells define the shared black-panel look for dialogs and library modals. */
 .movie-search-popover,
 .related-results-popover,
 .account-popover,
@@ -968,6 +991,7 @@ textarea:focus {
   outline: none;
 }
 
+/* Account modal styles cover login, registration, signed-in status, and profile actions. */
 .account-panel {
   padding: 16px 18px 18px;
 }
@@ -1052,6 +1076,7 @@ textarea:focus {
   text-align: left;
 }
 
+/* The watchlist page reuses the theater panel language for a full-page library view. */
 .watchlist-page {
   position: relative;
   z-index: 2;
@@ -1169,6 +1194,7 @@ textarea:focus {
   padding: 0;
 }
 
+/* Watchlist cards present saved poster art with actions to open feedback or remove the movie. */
 .watchlist-card {
   display: grid;
   gap: 8px;
@@ -1253,6 +1279,7 @@ textarea:focus {
   font-size: 0.8rem;
 }
 
+/* Taste profile styles display liked and disliked movie lists in removable columns. */
 .taste-profile-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1327,6 +1354,7 @@ textarea:focus {
   color: var(--muted);
 }
 
+/* Movie feedback styles provide the compact modal used to move watchlist entries into taste history. */
 .movie-feedback-modal {
   z-index: 30;
 }
@@ -1361,6 +1389,7 @@ textarea:focus {
   min-width: 0;
 }
 
+/* Movie search styles position the autocomplete list below the title input. */
 .movie-search {
   position: relative;
   padding: 16px 18px 18px;
@@ -1395,6 +1424,7 @@ textarea:focus {
   text-align: left;
 }
 
+/* Related result cards and detail panes show recommendation posters, copy, links, and providers. */
 .related-results-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1665,6 +1695,7 @@ textarea:focus {
   color: var(--ink);
 }
 
+/* Search results use a listbox-style layout with small posters and clipped summary copy. */
 .movie-results {
   position: absolute;
   top: calc(100% + 8px);
@@ -1748,6 +1779,7 @@ textarea:focus {
   font-size: 0.8rem;
 }
 
+/* The sr-only utility keeps labels available to assistive technology without visual clutter. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1760,6 +1792,7 @@ textarea:focus {
   border: 0;
 }
 
+/* Medium screens soften the poster wall and scale down the marquee. */
 @media (max-width: 900px) {
   .poster-wall {
     --poster-wall-gap: 9px;
@@ -1776,6 +1809,7 @@ textarea:focus {
   }
 }
 
+/* Tablet and phone layouts stack forms, modals, chat headers, and recommendation details. */
 @media (max-width: 700px) {
   button,
   input,
@@ -1952,6 +1986,7 @@ textarea:focus {
   }
 }
 
+/* Narrow phone rules tighten spacing and keep poster grids, modals, and feedback controls usable. */
 @media (max-width: 460px) {
   .poster-wall {
     --poster-wall-gap: 8px;

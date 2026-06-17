@@ -1,3 +1,4 @@
+// DOM references are cached once so the interaction code can update the same controls consistently.
 const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
 const messagesEl = document.querySelector("#messages");
@@ -62,6 +63,7 @@ const movieLikedButton = document.querySelector("#movie-liked-button");
 const movieDislikedButton = document.querySelector("#movie-disliked-button");
 const movieFeedbackStatus = document.querySelector("#movie-feedback-status");
 
+// Local fallback posters keep the animated wall working even before the API responds.
 const fallbackWallPosters = [
   {
     title: "The Matrix",
@@ -105,6 +107,7 @@ const fallbackWallPosters = [
   }
 ];
 
+// Core UI state tracks the current chat, selected poster picks, and poster-wall animation settings.
 const conversation = [];
 const selectedMovies = Array(4).fill(null);
 const POSTER_WALL_TARGET_COLUMN_WIDTH = 74;
@@ -117,6 +120,7 @@ const POSTER_WALL_BASE_SPEED = 8.5;
 const POSTER_WALL_SPEED_VARIANCE = 4;
 const POSTER_WALL_MAX_FRAME_DELTA = 0.05;
 
+// Mutable interaction state coordinates modals, loading flags, cached results, auth state, and saved movie selections.
 let activeSlotIndex = -1;
 let searchResults = [];
 let highlightedResult = -1;
@@ -149,6 +153,7 @@ let tasteProfileReturnFocus = accountButton;
 let movieFeedbackReturnFocus = null;
 let selectedWatchlistMovie = null;
 
+// Chat form submission sends non-empty text through the main chat request flow.
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -161,6 +166,7 @@ form.addEventListener("submit", async (event) => {
   sendChatMessage(text);
 });
 
+// Enter submits the composer while Shift+Enter keeps textarea line breaks available.
 input.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -168,6 +174,7 @@ input.addEventListener("keydown", (event) => {
   }
 });
 
+// Poster slot clicks either open the picker for an empty slot or remove an existing pick.
 posterGrid.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-movie-slot]");
   const removeButton = event.target.closest("[data-remove-movie-slot]");
@@ -183,6 +190,7 @@ posterGrid.addEventListener("click", (event) => {
   }
 });
 
+// Movie search input is debounced so TMDB is queried only after the user pauses typing.
 movieSearchInput.addEventListener("input", () => {
   const query = movieSearchInput.value.trim();
 
@@ -199,6 +207,7 @@ movieSearchInput.addEventListener("input", () => {
   }, 220);
 });
 
+// Keyboard handling keeps the movie search popover accessible with escape, arrows, and enter.
 movieSearchInput.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
@@ -234,6 +243,7 @@ movieSearchInput.addEventListener("keydown", (event) => {
   }
 });
 
+// Close and action buttons are wired to their matching modal, account, watchlist, and feedback flows.
 movieSearchClose.addEventListener("click", closeMoviePicker);
 relatedResultsClose.addEventListener("click", closeRelatedResults);
 accountButton.addEventListener("click", handleAccountButtonClick);
@@ -257,6 +267,7 @@ accountMenuLogout.addEventListener("click", () => {
   handleAccountLogout();
 });
 
+// Auth mode tabs switch the account form between login and registration fields.
 accountModeButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setAccountMode(button.dataset.authMode);
@@ -266,6 +277,7 @@ accountModeButtons.forEach((button) => {
 accountForm.addEventListener("submit", handleAccountSubmit);
 accountLogoutButton.addEventListener("click", handleAccountLogout);
 
+// Clicking modal backdrops closes the active overlay while preserving clicks inside each popover.
 movieSearchModal.addEventListener("click", (event) => {
   if (event.target === movieSearchModal) {
     closeMoviePicker();
@@ -296,6 +308,7 @@ movieFeedbackModal.addEventListener("click", (event) => {
   }
 });
 
+// Escape closes the foremost open modal or page-level overlay.
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !movieSearchModal.hidden) {
     closeMoviePicker();
@@ -332,6 +345,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// Outside clicks dismiss transient popovers like search results and the account menu.
 document.addEventListener("click", (event) => {
   if (!movieSearchModal.hidden && !event.target.closest(".movie-search-popover")) {
     closeResults();
@@ -342,6 +356,7 @@ document.addEventListener("click", (event) => {
   }
 });
 
+// Discovery controls trigger either pick-based recommendations or genre/actor search.
 pickSearchButton.addEventListener("click", () => {
   searchPickRecommendations();
 });
@@ -363,15 +378,18 @@ genreActorForm.addEventListener("submit", (event) => {
   searchRelatedMovies(text);
 });
 
+// Browser history events keep the watchlist page and home view in sync with the hash.
 window.addEventListener("popstate", syncViewFromLocation);
 window.addEventListener("hashchange", syncViewFromLocation);
 
+// Initial rendering hydrates the main screen, poster wall, account state, and hash-based view.
 renderPosterSlots();
 loadPosterWall();
 setAccountMode("login");
 loadAuthState();
 syncViewFromLocation();
 
+// Poster wall resize listeners keep the animated background fitted to viewport changes.
 if (posterWall) {
   window.addEventListener("resize", schedulePosterWallRender);
 
@@ -380,6 +398,7 @@ if (posterWall) {
   }
 }
 
+// Sends the chat transcript and current poster picks to the server, then renders the assistant reply.
 async function sendChatMessage(text) {
   if (isChatLoading) {
     return;
@@ -415,6 +434,7 @@ async function sendChatMessage(text) {
   }
 }
 
+// Searches TMDB through the server for a genre or actor query and opens the recommendation modal.
 async function searchRelatedMovies(query) {
   if (isRelatedLoading) {
     return;
@@ -446,6 +466,7 @@ async function searchRelatedMovies(query) {
   }
 }
 
+// Requests recommendations based on the currently selected poster picks.
 async function searchPickRecommendations() {
   if (isRelatedLoading) {
     return;
@@ -494,6 +515,7 @@ async function searchPickRecommendations() {
   }
 }
 
+// Searches TMDB title matches for the active empty poster slot.
 async function searchMovies(query) {
   if (activeSlotIndex === -1 || selectedMovies[activeSlotIndex]) {
     setMovieStatus("Pick an empty poster slot first.");
@@ -535,6 +557,7 @@ async function searchMovies(query) {
   }
 }
 
+// Renders the movie-picker listbox and keeps its active-descendant accessibility state in sync.
 function renderResults() {
   movieResultsEl.replaceChildren();
 
@@ -590,6 +613,7 @@ function renderResults() {
   );
 }
 
+// Adds a chosen TMDB movie to the current poster slot while preventing duplicates.
 function addSelectedMovie(movie) {
   if (selectedMovies.some((selected) => selected?.id === movie.id)) {
     setMovieStatus("That title is already on the board.");
@@ -613,12 +637,14 @@ function addSelectedMovie(movie) {
   renderPosterSlots();
 }
 
+// Stores the latest pick-based recommendations so they can be reopened while the picks are unchanged.
 function cachePickRecommendations(data) {
   lastPickRecommendationsData = data;
   lastPickRecommendationKey = getSelectedMovieKey();
   updatePickSearchButtonState();
 }
 
+// Reopens the cached pick recommendation results when they still match the current picks.
 function showLastPickRecommendations() {
   if (isRelatedLoading || !hasCurrentPickRecommendations()) {
     return;
@@ -628,6 +654,7 @@ function showLastPickRecommendations() {
   renderRelatedResults(lastPickRecommendationsData);
 }
 
+// Renders the four poster-pick slots, including add buttons and filled poster cards.
 function renderPosterSlots() {
   posterGrid.replaceChildren();
 
@@ -693,6 +720,7 @@ function renderPosterSlots() {
   updatePickSearchButtonState();
 }
 
+// Opens the movie picker for one poster slot and prepares its search state.
 function openMoviePicker(slotIndex) {
   activeSlotIndex = slotIndex;
   movieSearchTitle.textContent = `Pick a movie for slot ${slotIndex + 1}`;
@@ -704,6 +732,7 @@ function openMoviePicker(slotIndex) {
   window.requestAnimationFrame(() => movieSearchInput.focus());
 }
 
+// Closes the movie picker and returns focus to the slot that launched it.
 function closeMoviePicker() {
   if (searchController) {
     searchController.abort();
@@ -717,6 +746,7 @@ function closeMoviePicker() {
   activeSlotIndex = -1;
 }
 
+// Loads poster-wall art from the API and falls back to local posters if the request fails.
 async function loadPosterWall() {
   if (!posterWall) {
     return;
@@ -736,6 +766,7 @@ async function loadPosterWall() {
   }
 }
 
+// Builds the animated poster-wall columns from the available poster deck.
 function renderPosterWall(posters) {
   const usablePosters = getUniquePosterWallPosters(posters);
 
@@ -807,6 +838,7 @@ function renderPosterWall(posters) {
   startPosterWallAnimation();
 }
 
+// Schedules a single poster-wall rerender for viewport changes.
 function schedulePosterWallRender() {
   if (!currentPosterWallPosters.length || posterWallResizeFrame) {
     return;
@@ -818,6 +850,7 @@ function schedulePosterWallRender() {
   });
 }
 
+// Calculates poster-wall column and row counts from the current viewport size.
 function getPosterWallLayout() {
   const wallWidth = Math.max(posterWall.offsetWidth || 0, window.innerWidth || 0);
   const wallHeight = Math.max(posterWall.offsetHeight || 0, window.innerHeight || 0);
@@ -841,10 +874,12 @@ function getPosterWallLayout() {
   return { columnCount, rowsPerColumn, posterStride };
 }
 
+// Clamps a numeric layout value into a safe minimum and maximum range.
 function clampNumber(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+// Starts the poster-wall animation loop if it is not already running.
 function startPosterWallAnimation() {
   if (posterWallAnimationFrame || !posterWallColumns.length) {
     return;
@@ -854,6 +889,7 @@ function startPosterWallAnimation() {
   posterWallAnimationFrame = window.requestAnimationFrame(stepPosterWall);
 }
 
+// Stops the poster-wall animation loop and clears its frame bookkeeping.
 function stopPosterWallAnimation() {
   if (posterWallAnimationFrame) {
     window.cancelAnimationFrame(posterWallAnimationFrame);
@@ -864,6 +900,7 @@ function stopPosterWallAnimation() {
   posterWallColumns = [];
 }
 
+// Advances every poster-wall column and recycles tiles when they leave the visible loop.
 function stepPosterWall(timestamp) {
   const elapsedSeconds = Math.min(
     (timestamp - posterWallLastTimestamp) / 1000,
@@ -897,6 +934,7 @@ function stepPosterWall(timestamp) {
   posterWallAnimationFrame = window.requestAnimationFrame(stepPosterWall);
 }
 
+// Moves one poster-wall tile to the loop edge and swaps in the next poster for that column.
 function recyclePosterWallTile(state) {
   const tile =
     state.direction < 0
@@ -917,6 +955,7 @@ function recyclePosterWallTile(state) {
   }
 }
 
+// Creates a deterministic per-column poster deck so neighboring columns vary without obvious repeats.
 function createColumnPosterDeck(posters, columnIndex) {
   if (posters.length < 2) {
     return [...posters];
@@ -928,6 +967,7 @@ function createColumnPosterDeck(posters, columnIndex) {
   return posters.map((_, index) => posters[(offset + index * step) % posters.length]);
 }
 
+// Finds a step size that walks the whole poster deck before repeating.
 function getCoprimeStep(length, seed) {
   let step = seed % length || 1;
 
@@ -938,6 +978,7 @@ function getCoprimeStep(length, seed) {
   return step;
 }
 
+// Computes the greatest common divisor for poster deck stepping.
 function getGreatestCommonDivisor(firstValue, secondValue) {
   let first = firstValue;
   let second = secondValue;
@@ -951,6 +992,7 @@ function getGreatestCommonDivisor(firstValue, secondValue) {
   return first;
 }
 
+// Returns the next poster for a wall column while avoiding recent repeats in that column.
 function getNextPosterForColumn(state) {
   if (!state.deck.length) {
     return null;
@@ -972,6 +1014,7 @@ function getNextPosterForColumn(state) {
   return selectedPoster;
 }
 
+// Tracks recent posters in one column so the wall does not visibly loop the same art.
 function rememberPosterForColumn(state, poster) {
   const key = getPosterKey(poster);
 
@@ -986,6 +1029,7 @@ function rememberPosterForColumn(state, poster) {
   }
 }
 
+// Deduplicates poster-wall candidates by id, title, or poster URL before shuffling them.
 function getUniquePosterWallPosters(posters) {
   const seenPosters = new Set();
   const uniquePosters = [];
@@ -1008,6 +1052,7 @@ function getUniquePosterWallPosters(posters) {
   return uniquePosters;
 }
 
+// Creates a stable identity key for poster-wall deduplication.
 function getPosterKey(poster) {
   if (!poster) {
     return "";
@@ -1016,6 +1061,7 @@ function getPosterKey(poster) {
   return String(poster.id || poster.posterUrl || poster.title || "");
 }
 
+// Shuffles an array copy with Fisher-Yates so the original list is not mutated.
 function shuffleItems(items) {
   const shuffled = [...items];
 
@@ -1027,6 +1073,7 @@ function shuffleItems(items) {
   return shuffled;
 }
 
+// Creates one poster-wall tile element with image loading configured for background art.
 function createPosterWallTile(poster, index) {
   const tile = document.createElement("div");
   tile.className = "poster-wall-tile";
@@ -1048,6 +1095,7 @@ function createPosterWallTile(poster, index) {
   return tile;
 }
 
+// Updates an existing poster-wall tile with a new poster and tilt.
 function updatePosterWallTile(tile, poster, index) {
   tile.style.setProperty("--tilt", `${((index % 5) - 2) * 0.55}deg`);
   tile.dataset.posterKey = getPosterKey(poster);
@@ -1063,6 +1111,7 @@ function updatePosterWallTile(tile, poster, index) {
   }
 }
 
+// Renders either the recommendation grid or an empty state from a related-results response.
 function renderRelatedResults(data) {
   lastRelatedResultsData = data;
   selectedRelatedMovie = null;
@@ -1140,6 +1189,7 @@ function renderRelatedResults(data) {
   });
 }
 
+// Opens the detailed view for one recommendation and fetches provider data when possible.
 async function showRelatedMovieDetail(movie, isPickMatch) {
   selectedRelatedMovie = movie;
   selectedRelatedMovieIsPickMatch = isPickMatch;
@@ -1169,6 +1219,7 @@ async function showRelatedMovieDetail(movie, isPickMatch) {
   renderRelatedMovieDetail();
 }
 
+// Renders the selected recommendation's poster, description, fit reason, links, and providers.
 function renderRelatedMovieDetail() {
   relatedResultsModal.classList.add("detail-open");
   relatedResultsGrid.replaceChildren();
@@ -1297,6 +1348,7 @@ function renderRelatedMovieDetail() {
   relatedResultsGrid.append(detail);
 }
 
+// Chooses the short description text shown on recommendation cards.
 function formatRelatedMovieCopy(movie, isPickMatch) {
   const description = String(movie.description || movie.overview || "").trim();
   const fitReason = String(movie.fitReason || "").trim();
@@ -1308,11 +1360,13 @@ function formatRelatedMovieCopy(movie, isPickMatch) {
   return description || fitReason || "No synopsis available.";
 }
 
+// Builds a Letterboxd search URL from a movie title and optional year.
 function getLetterboxdSearchUrl(title, year) {
   const query = [title, year].filter(Boolean).join(" ");
   return `https://letterboxd.com/search/films/${encodeURIComponent(query)}/`;
 }
 
+// Creates a reusable external-link button with an optional service icon.
 function createExternalLinkButton(href, label, iconSrc) {
   const anchor = document.createElement("a");
   anchor.href = href;
@@ -1332,6 +1386,7 @@ function createExternalLinkButton(href, label, iconSrc) {
   return anchor;
 }
 
+// Fetches watch providers for one movie and returns empty provider groups on failure.
 async function fetchMovieProviders(movieId) {
   const response = await fetch(
     `/api/movies/providers?movieId=${encodeURIComponent(movieId)}`
@@ -1345,6 +1400,7 @@ async function fetchMovieProviders(movieId) {
   return data;
 }
 
+// Builds the streaming, rental, purchase, and TMDB watch-link section for a detail card.
 function createProviderSection(movie) {
   if (!movie) {
     return null;
@@ -1410,12 +1466,14 @@ function createProviderSection(movie) {
   return section;
 }
 
+// Opens the related-results modal and records where focus should return.
 function openRelatedResults(returnFocusElement = genreActorInput) {
   relatedResultsReturnFocus = returnFocusElement || genreActorInput;
   relatedResultsModal.hidden = false;
   document.body.classList.add("search-open");
 }
 
+// Closes the related-results modal and clears the selected recommendation detail state.
 function closeRelatedResults() {
   relatedResultsModal.hidden = true;
   relatedResultsGrid.replaceChildren();
@@ -1431,6 +1489,7 @@ function closeRelatedResults() {
   }
 }
 
+// Opens the account modal for signed-out users or toggles the account menu for signed-in users.
 function handleAccountButtonClick() {
   if (authState.user) {
     toggleAccountMenu();
@@ -1440,6 +1499,7 @@ function handleAccountButtonClick() {
   openAccountModal(accountButton);
 }
 
+// Switches the signed-in account menu between open and closed states.
 function toggleAccountMenu() {
   if (accountMenu.hidden) {
     openAccountMenu();
@@ -1449,16 +1509,19 @@ function toggleAccountMenu() {
   closeAccountMenu();
 }
 
+// Opens the signed-in account menu and updates ARIA state.
 function openAccountMenu() {
   accountMenu.hidden = false;
   accountButton.setAttribute("aria-expanded", "true");
 }
 
+// Closes the signed-in account menu and updates ARIA state.
 function closeAccountMenu() {
   accountMenu.hidden = true;
   accountButton.setAttribute("aria-expanded", "false");
 }
 
+// Shows the Want to Watch action only when a signed-in user is viewing a recommendation detail.
 function renderWantWatchButton() {
   const hasSelectedMovie = Boolean(selectedRelatedMovie);
   wantWatchButton.hidden = !hasSelectedMovie;
@@ -1466,6 +1529,7 @@ function renderWantWatchButton() {
   wantWatchButton.textContent = isFeedbackLoading ? "Saving..." : "Want to Watch";
 }
 
+// Saves the currently selected recommendation to the signed-in user's watchlist.
 async function handleWantToWatch() {
   if (isFeedbackLoading || !selectedRelatedMovie) {
     return;
@@ -1494,6 +1558,7 @@ async function handleWantToWatch() {
   }
 }
 
+// Opens the watchlist page after requiring a signed-in account.
 async function openWatchlist(returnFocusElement = accountButton, options = {}) {
   const canOpen = await requireSignedIn({
     message: "Log in to see your watch list.",
@@ -1521,6 +1586,7 @@ async function openWatchlist(returnFocusElement = accountButton, options = {}) {
   loadWatchlist();
 }
 
+// Closes the watchlist page, restores the home view, and optionally updates history.
 function closeWatchlist(options = {}) {
   closeMovieFeedbackModal({ preserveFocus: true });
   watchlistPage.hidden = true;
@@ -1545,6 +1611,7 @@ function closeWatchlist(options = {}) {
   }
 }
 
+// Applies the correct page view when the URL hash changes.
 function syncViewFromLocation() {
   if (window.location.hash === "#watchlist") {
     openWatchlist(accountButton, { updateHistory: false });
@@ -1556,6 +1623,7 @@ function syncViewFromLocation() {
   }
 }
 
+// Loads the signed-in user's watchlist feedback records.
 async function loadWatchlist() {
   try {
     const movies = await fetchMovieFeedback("want_to_watch");
@@ -1566,6 +1634,7 @@ async function loadWatchlist() {
   }
 }
 
+// Renders watchlist cards or an empty watchlist message.
 function renderWatchlist(movies) {
   watchlistGrid.replaceChildren();
 
@@ -1583,6 +1652,7 @@ function renderWatchlist(movies) {
   });
 }
 
+// Creates one watchlist card with poster, open-feedback action, and removal action.
 function createWatchlistCard(movie) {
   const card = document.createElement("article");
   card.className = "watchlist-card";
@@ -1621,6 +1691,7 @@ function createWatchlistCard(movie) {
   return card;
 }
 
+// Removes a movie from the watchlist and refreshes the list.
 async function removeWatchlistMovie(movie) {
   if (isFeedbackLoading) {
     return;
@@ -1639,6 +1710,7 @@ async function removeWatchlistMovie(movie) {
   }
 }
 
+// Opens the feedback modal for a watchlist movie and prepares focus restoration.
 function openMovieFeedbackModal(movie, returnFocusElement) {
   selectedWatchlistMovie = movie;
   movieFeedbackReturnFocus = returnFocusElement || watchlistBack;
@@ -1651,6 +1723,7 @@ function openMovieFeedbackModal(movie, returnFocusElement) {
   window.requestAnimationFrame(() => movieLikedButton.focus());
 }
 
+// Closes the feedback modal and clears the selected watchlist movie.
 function closeMovieFeedbackModal(options = {}) {
   if (movieFeedbackModal.hidden) {
     return;
@@ -1667,6 +1740,7 @@ function closeMovieFeedbackModal(options = {}) {
   }
 }
 
+// Builds the poster and helper copy shown inside the feedback modal.
 function createMovieFeedbackSummary(movie) {
   const summary = document.createElement("div");
   summary.className = "movie-feedback-summary";
@@ -1690,6 +1764,7 @@ function createMovieFeedbackSummary(movie) {
   return summary;
 }
 
+// Moves a watchlist movie into liked or disliked feedback.
 async function handleWatchlistFeedback(status) {
   if (isFeedbackLoading || !selectedWatchlistMovie) {
     return;
@@ -1717,6 +1792,7 @@ async function handleWatchlistFeedback(status) {
   }
 }
 
+// Opens the taste-profile modal after requiring a signed-in account.
 async function openTasteProfile(returnFocusElement = accountButton) {
   const canOpen = await requireSignedIn({
     message: "Log in to see your taste profile.",
@@ -1738,6 +1814,7 @@ async function openTasteProfile(returnFocusElement = accountButton) {
   loadTasteProfile();
 }
 
+// Closes the taste-profile modal and clears its rendered lists.
 function closeTasteProfile() {
   tasteProfileModal.hidden = true;
   tasteProfileStatus.textContent = "";
@@ -1750,6 +1827,7 @@ function closeTasteProfile() {
   }
 }
 
+// Loads liked and disliked movies for the taste-profile modal.
 async function loadTasteProfile() {
   try {
     const response = await fetch("/api/profile");
@@ -1777,6 +1855,7 @@ async function loadTasteProfile() {
   }
 }
 
+// Renders one taste-profile list with removable movie entries.
 function renderTasteList(listElement, movies, emptyText) {
   listElement.replaceChildren();
 
@@ -1811,6 +1890,7 @@ function renderTasteList(listElement, movies, emptyText) {
   });
 }
 
+// Removes a movie from the saved taste profile and refreshes the modal.
 async function removeTasteProfileMovie(movie) {
   if (isFeedbackLoading) {
     return;
@@ -1834,6 +1914,7 @@ async function removeTasteProfileMovie(movie) {
   }
 }
 
+// Fetches saved movie feedback records, optionally filtered to one status like want_to_watch.
 async function fetchMovieFeedback(status) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   const response = await fetch(`/api/movies/feedback${query}`);
@@ -1846,6 +1927,7 @@ async function fetchMovieFeedback(status) {
   return Array.isArray(data.feedback) ? data.feedback : [];
 }
 
+// Saves or updates one movie feedback record through the server API.
 async function saveMovieFeedback(movie, status, source) {
   const response = await fetch("/api/movies/feedback", {
     method: "POST",
@@ -1861,6 +1943,7 @@ async function saveMovieFeedback(movie, status, source) {
   return data.feedback;
 }
 
+// Deletes one saved movie feedback record by the strongest identifier available.
 async function deleteMovieFeedback(movie) {
   const params = new URLSearchParams();
 
@@ -1889,6 +1972,7 @@ async function deleteMovieFeedback(movie) {
   return data;
 }
 
+// Converts a movie object into the feedback payload shape expected by the server.
 function createMovieFeedbackPayload(movie, status, source) {
   return {
     tmdbId: getMovieTmdbId(movie),
@@ -1901,6 +1985,7 @@ function createMovieFeedbackPayload(movie, status, source) {
   };
 }
 
+// Extracts a TMDB id from recommendation, feedback, or picker movie shapes without confusing database ids for TMDB ids.
 function getMovieTmdbId(movie) {
   if (movie?.tmdbId || movie?.tmdb_id) {
     return movie.tmdbId || movie.tmdb_id;
@@ -1913,6 +1998,7 @@ function getMovieTmdbId(movie) {
   return movie?.id || "";
 }
 
+// Ensures the user is signed in before opening account-only features.
 async function requireSignedIn({ message, returnFocusElement, statusElement } = {}) {
   if (authState.authConfigured === null) {
     await loadAuthState();
@@ -1938,6 +2024,7 @@ async function requireSignedIn({ message, returnFocusElement, statusElement } = 
   return false;
 }
 
+// Applies the shared feedback-loading disabled state across watchlist, profile, and feedback controls.
 function setFeedbackLoading(isLoading) {
   isFeedbackLoading = isLoading;
   renderWantWatchButton();
@@ -1955,6 +2042,7 @@ function setFeedbackLoading(isLoading) {
   });
 }
 
+// Locks page scrolling while library modals are open.
 function updateLibraryBodyLock() {
   document.body.classList.toggle(
     "library-open",
@@ -1962,6 +2050,7 @@ function updateLibraryBodyLock() {
   );
 }
 
+// Checks the current auth session and updates account UI state.
 async function loadAuthState() {
   try {
     const response = await fetch("/api/auth/me");
@@ -1985,6 +2074,7 @@ async function loadAuthState() {
   renderAccountState();
 }
 
+// Opens the account dialog and focuses the most useful control for the current auth state.
 function openAccountModal(returnFocusElement = accountButton) {
   accountReturnFocus = returnFocusElement || accountButton;
   accountModal.hidden = false;
@@ -2008,6 +2098,7 @@ function openAccountModal(returnFocusElement = accountButton) {
   });
 }
 
+// Closes the account dialog and restores focus to the launcher.
 function closeAccountModal() {
   accountModal.hidden = true;
   accountStatus.textContent = "";
@@ -2019,6 +2110,7 @@ function closeAccountModal() {
   }
 }
 
+// Switches the account form between login and registration mode.
 function setAccountMode(mode, options = {}) {
   accountMode = mode === "register" ? "register" : "login";
 
@@ -2050,6 +2142,7 @@ function setAccountMode(mode, options = {}) {
   updateAccountControlsDisabled();
 }
 
+// Renders signed-in versus signed-out account controls from the latest auth state.
 function renderAccountState() {
   const user = authState.user;
 
@@ -2079,6 +2172,7 @@ function renderAccountState() {
   updateAccountControlsDisabled();
 }
 
+// Submits login or registration credentials and stores the returned user state.
 async function handleAccountSubmit(event) {
   event.preventDefault();
 
@@ -2150,6 +2244,7 @@ async function handleAccountSubmit(event) {
   }
 }
 
+// Logs the current user out and resets account UI state.
 async function handleAccountLogout() {
   if (isAuthLoading) {
     return;
@@ -2195,11 +2290,13 @@ async function handleAccountLogout() {
   }
 }
 
+// Applies the shared auth-loading flag and refreshes disabled controls.
 function setAuthLoading(isLoading) {
   isAuthLoading = isLoading;
   updateAccountControlsDisabled();
 }
 
+// Enables or disables account controls based on auth readiness and in-flight requests.
 function updateAccountControlsDisabled() {
   const formDisabled = isAuthLoading || authState.authConfigured === false;
 
@@ -2223,6 +2320,7 @@ function updateAccountControlsDisabled() {
   accountSubmit.textContent = accountMode === "register" ? "Creating..." : "Logging in...";
 }
 
+// Safely reads a JSON response body and returns an empty object when parsing fails.
 async function readJsonResponse(response) {
   try {
     return await response.json();
@@ -2231,10 +2329,12 @@ async function readJsonResponse(response) {
   }
 }
 
+// Chooses the best display name available for a signed-in user.
 function getAccountDisplayName(user) {
   return String(user?.displayName || user?.username || "Movie fan").trim();
 }
 
+// Shortens long account names so the header button stays compact.
 function shortenAccountName(name) {
   const normalizedName = String(name || "Movie fan").trim();
 
@@ -2245,6 +2345,7 @@ function shortenAccountName(name) {
   return `${normalizedName.slice(0, 15)}...`;
 }
 
+// Clears and hides the movie search result listbox.
 function closeResults() {
   movieResultsEl.hidden = true;
   movieResultsEl.replaceChildren();
@@ -2254,10 +2355,12 @@ function closeResults() {
   highlightedResult = -1;
 }
 
+// Updates the status text inside the movie-picker modal.
 function setMovieStatus(text) {
   movieSearchStatus.textContent = text;
 }
 
+// Returns the currently selected poster picks in the compact API payload shape.
 function getFavoriteMoviePayload() {
   return selectedMovies.filter(Boolean).map((movie) => ({
     id: movie.id,
@@ -2266,6 +2369,7 @@ function getFavoriteMoviePayload() {
   }));
 }
 
+// Builds a stable cache key for the current selected poster picks.
 function getSelectedMovieKey() {
   return getFavoriteMoviePayload()
     .map((movie) => String(movie.id || `${movie.title}:${movie.year || ""}`))
@@ -2273,6 +2377,7 @@ function getSelectedMovieKey() {
     .join("|");
 }
 
+// Checks whether cached pick recommendations still belong to the current poster selection.
 function hasCurrentPickRecommendations() {
   const selectedMovieKey = getSelectedMovieKey();
   const hasRecommendations = Array.isArray(lastPickRecommendationsData?.results)
@@ -2287,10 +2392,12 @@ function hasCurrentPickRecommendations() {
   );
 }
 
+// Formats movie display labels consistently across cards, modals, and status text.
 function formatMovieTitle(movie) {
   return movie.year ? `${movie.title} (${movie.year})` : movie.title;
 }
 
+// Appends one chat message bubble and scrolls the message pane to the newest item.
 function addMessage(role, text) {
   const message = document.createElement("article");
   message.className = `message message-${role === "user" ? "user" : "bot"}`;
@@ -2308,6 +2415,7 @@ function addMessage(role, text) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+// Applies chat-loading UI state and updates the top status pill.
 function setLoading(isLoading) {
   isChatLoading = isLoading;
   input.disabled = isLoading;
@@ -2316,6 +2424,7 @@ function setLoading(isLoading) {
   statusPill.textContent = isLoading ? "Thinking" : "Ready";
 }
 
+// Applies recommendation-loading UI state to genre search and pick search controls.
 function setRelatedLoading(isLoading) {
   isRelatedLoading = isLoading;
   genreActorInput.disabled = isLoading;
@@ -2323,6 +2432,7 @@ function setRelatedLoading(isLoading) {
   updatePickSearchButtonState();
 }
 
+// Enables pick search and cached-result actions according to current loading and cache state.
 function updatePickSearchButtonState() {
   const isMoodSearchDisabled = isChatLoading || isRelatedLoading;
   const canShowLastPickRecommendations = hasCurrentPickRecommendations();

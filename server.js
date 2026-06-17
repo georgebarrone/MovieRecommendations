@@ -1,3 +1,4 @@
+// Core Node modules provide HTTP serving, cryptography, file access, and path handling for the custom server.
 const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -5,11 +6,13 @@ const path = require("path");
 const { promisify } = require("util");
 const { createClient } = require("@libsql/client");
 
+// Project paths keep static file serving anchored to the repository root.
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 
 loadEnvFile(path.join(ROOT, ".env"));
 
+// Environment values configure the external services while treating placeholder secrets as missing.
 const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = cleanSecret(
   process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
@@ -24,8 +27,10 @@ const TURSO_AUTH_TOKEN = cleanSecret(process.env.TURSO_AUTH_TOKEN);
 const SESSION_SECRET = cleanSecret(process.env.SESSION_SECRET);
 const AUTH_INVITE_CODE = cleanSecret(process.env.AUTH_INVITE_CODE);
 
+// Scrypt is promisified so password hashing can be written with async/await.
 const scryptAsync = promisify(crypto.scrypt);
 
+// Fallback posters keep the landing wall populated when TMDB credentials are unavailable.
 const FALLBACK_POSTER_WALL = [
   {
     title: "The Matrix",
@@ -69,6 +74,7 @@ const FALLBACK_POSTER_WALL = [
   }
 ];
 
+// Shared constants centralize image sizing, session lifetime, password hashing, and feedback vocabulary.
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 const POSTER_WALL_PAGE_SAMPLE_COUNT = 12;
 const POSTER_WALL_LIMIT = 240;
@@ -83,9 +89,11 @@ const FEEDBACK_STATUS_VALUES = new Set([
   "want_to_watch"
 ]);
 
+// Database client state is cached so Turso setup happens once per server process.
 let dbClient = null;
 let databaseReadyPromise = null;
 
+// TMDB genre ids are kept locally so casual genre searches can become discover requests.
 const TMDB_MOVIE_GENRES = [
   { id: 28, name: "Action" },
   { id: 12, name: "Adventure" },
@@ -108,6 +116,7 @@ const TMDB_MOVIE_GENRES = [
   { id: 37, name: "Western" }
 ];
 
+// Genre aliases translate common user phrases into one or more TMDB genre ids.
 const GENRE_ALIASES = new Map([
   ["sci fi", { name: "Science Fiction", ids: [878] }],
   ["sci-fi", { name: "Science Fiction", ids: [878] }],
@@ -125,6 +134,7 @@ const GENRE_ALIASES = new Map([
   ["musical", { name: "Music", ids: [10402] }]
 ]);
 
+// Static MIME types make the tiny file server return useful content headers.
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -139,6 +149,7 @@ const MIME_TYPES = {
   ".ico": "image/x-icon"
 };
 
+// The chat system prompt defines the assistant voice and recommendation boundaries for Gemini.
 const movieSystemPrompt = [
   "You are Movie Match, a friendly movie recommendation assistant.",
   "Help the user find movies based on taste, mood, genre, era, language, runtime, favorite films, or people they like.",
@@ -149,6 +160,7 @@ const movieSystemPrompt = [
   "Do not claim exact streaming availability unless the user provides it; suggest they check their preferred services."
 ].join(" ");
 
+// The pick recommendation prompt asks Gemini for strict JSON that can be enriched into movie cards.
 const pickRecommendationSystemPrompt = [
   "You are Movie Match, the same friendly movie recommendation assistant used in chat.",
   "Use the user's selected movies as taste signals and recommend movies with a similar taste profile.",
@@ -158,6 +170,7 @@ const pickRecommendationSystemPrompt = [
   "Return JSON only. Use this shape: {\"recommendations\":[{\"title\":\"Movie title\",\"year\":\"YYYY\",\"description\":\"One concise spoiler-free synopsis.\",\"fit\":\"One quick sentence explaining why it fits the selected movies.\"}]}"
 ].join(" ");
 
+// The HTTP server routes API requests first and falls back to static files for the browser app.
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -270,6 +283,7 @@ server.listen(PORT, () => {
   }
 });
 
+// Handles free-form chat by combining recent messages, selected picks, and saved taste data into one Gemini request.
 async function handleChat(req, res) {
   if (!GEMINI_API_KEY) {
     sendJson(res, 500, {
@@ -334,6 +348,7 @@ async function handleChat(req, res) {
   sendJson(res, 200, { reply });
 }
 
+// Handles poster-pick recommendations by asking Gemini first and filling any gaps with TMDB signals.
 async function handlePickRecommendations(req, res) {
   const body = await readJsonBody(req);
   const favoriteMovies = sanitizeFavoriteMovieDetails(body.favoriteMovies);
@@ -398,6 +413,7 @@ async function handlePickRecommendations(req, res) {
   });
 }
 
+// Searches TMDB by title and returns compact movie cards for the picker UI.
 async function handleMovieSearch(url, res) {
   if (!TMDB_API_KEY && !TMDB_ACCESS_TOKEN) {
     sendJson(res, 500, {
@@ -465,6 +481,7 @@ async function handleMovieSearch(url, res) {
   sendJson(res, 200, { results });
 }
 
+// Resolves a genre or actor query into three related TMDB movies for the discovery modal.
 async function handleRelatedMovies(url, res) {
   if (!TMDB_API_KEY && !TMDB_ACCESS_TOKEN) {
     sendJson(res, 500, {
@@ -528,6 +545,7 @@ async function handleRelatedMovies(url, res) {
   }
 }
 
+// Builds the animated poster wall from TMDB discovery results or the local fallback set.
 async function handlePosterWall(res) {
   if (!TMDB_API_KEY && !TMDB_ACCESS_TOKEN) {
     sendJson(res, 200, { posters: FALLBACK_POSTER_WALL });
@@ -544,6 +562,7 @@ async function handlePosterWall(res) {
   }
 }
 
+// Looks up US watch-provider names for a TMDB movie so detail cards can show streaming, rental, and purchase options.
 async function handleMovieProviders(url, res) {
   if (!TMDB_API_KEY && !TMDB_ACCESS_TOKEN) {
     sendJson(res, 500, {
@@ -600,6 +619,7 @@ async function handleMovieProviders(url, res) {
   }
 }
 
+// Reports whether account auth is configured and which user, if any, owns the current session.
 async function handleAuthMe(req, res) {
   if (!isAuthConfigured()) {
     sendJson(res, 200, { authConfigured: false, user: null });
@@ -610,6 +630,7 @@ async function handleAuthMe(req, res) {
   sendJson(res, 200, { authConfigured: true, user: serializeUser(user) });
 }
 
+// Creates a new account, stores a hashed password, and opens a login session for the registered user.
 async function handleAuthRegister(req, res) {
   if (!(await ensureAuthReady(res))) {
     return;
@@ -672,6 +693,7 @@ async function handleAuthRegister(req, res) {
   }
 }
 
+// Verifies submitted credentials and replaces any old session with a fresh authenticated session.
 async function handleAuthLogin(req, res) {
   if (!(await ensureAuthReady(res))) {
     return;
@@ -703,6 +725,7 @@ async function handleAuthLogin(req, res) {
   sendJson(res, 200, { user: serializeUser(formatUserRow(row)) });
 }
 
+// Deletes the current session token and clears the browser cookie.
 async function handleAuthLogout(req, res) {
   if (isAuthConfigured()) {
     const token = getCookie(req, SESSION_COOKIE_NAME);
@@ -720,6 +743,7 @@ async function handleAuthLogout(req, res) {
   sendJson(res, 200, { ok: true });
 }
 
+// Returns the signed-in user's saved taste profile for the profile modal and recommendation prompts.
 async function handleProfile(req, res) {
   const user = await requireCurrentUser(req, res);
 
@@ -734,6 +758,7 @@ async function handleProfile(req, res) {
   });
 }
 
+// Reads saved movie feedback for the current user, optionally filtered by feedback status.
 async function handleGetMovieFeedback(url, req, res) {
   const user = await requireCurrentUser(req, res);
 
@@ -761,6 +786,7 @@ async function handleGetMovieFeedback(url, req, res) {
   });
 }
 
+// Upserts a movie feedback record so watchlist and taste actions stay idempotent.
 async function handleSaveMovieFeedback(req, res) {
   const user = await requireCurrentUser(req, res);
 
@@ -839,6 +865,7 @@ async function handleSaveMovieFeedback(req, res) {
   sendJson(res, 201, { feedback: savedFeedback });
 }
 
+// Deletes one saved feedback record by id, TMDB id, or title/year fallback.
 async function handleDeleteMovieFeedback(url, req, res) {
   const user = await requireCurrentUser(req, res);
 
@@ -881,6 +908,7 @@ async function handleDeleteMovieFeedback(url, req, res) {
   });
 }
 
+// Calls Gemini for JSON-only recommendations based on selected movies and optional taste history.
 async function generateGeminiPickRecommendations(
   favoriteMovies,
   tasteProfile = createEmptyTasteProfile()
@@ -947,6 +975,7 @@ async function generateGeminiPickRecommendations(
   return normalizeGeminiRecommendations(rawRecommendations, favoriteMovies);
 }
 
+// Matches Gemini's text recommendations back to TMDB movies so the UI can display posters and links.
 async function enrichGeminiRecommendations(recommendations, excludedMovies) {
   const results = [];
   const seen = new Set();
@@ -1007,6 +1036,7 @@ async function enrichGeminiRecommendations(recommendations, excludedMovies) {
   return results.slice(0, 3);
 }
 
+// Finds the best TMDB search result for one Gemini recommendation while honoring excluded titles.
 async function findTmdbMovieForRecommendation(
   recommendation,
   excludedMovies,
@@ -1046,6 +1076,7 @@ async function findTmdbMovieForRecommendation(
   return bestMatch ? formatRelatedMovie(bestMatch) : null;
 }
 
+// Builds fallback recommendations from TMDB similar and recommendation endpoints for each selected pick.
 async function discoverMoviesFromFavoritePicks(
   favoriteMovies,
   excludedMovies,
@@ -1102,6 +1133,7 @@ async function discoverMoviesFromFavoritePicks(
     });
 }
 
+// Samples popular TMDB pages to gather enough poster art for the moving background.
 async function discoverPosterWallMovies() {
   const firstPage = await fetchTmdbJson(createDiscoverUrl({ page: 1 }));
   const pageCount = Math.min(Number(firstPage.total_pages || 1), 20);
@@ -1122,6 +1154,7 @@ async function discoverPosterWallMovies() {
     .map(formatPosterMovie);
 }
 
+// Discovers related movies by genre ids or cast id and keeps only usable English-language results.
 async function discoverRelatedMovies({ genreIds = [], castId = "" }) {
   const firstPage = await fetchTmdbJson(
     createDiscoverUrl({
@@ -1159,6 +1192,7 @@ async function discoverRelatedMovies({ genreIds = [], castId = "" }) {
     .map(formatRelatedMovie);
 }
 
+// Finds the first matching TMDB person record for an actor search query.
 async function findActor(query) {
   const tmdbUrl = new URL("https://api.themoviedb.org/3/search/person");
   tmdbUrl.searchParams.set("query", query);
@@ -1180,6 +1214,7 @@ async function findActor(query) {
   );
 }
 
+// Creates a TMDB discover URL with shared defaults for language, region, posters, and sorting.
 function createDiscoverUrl({
   page = 1,
   genreIds = [],
@@ -1217,6 +1252,7 @@ function createDiscoverUrl({
   return tmdbUrl;
 }
 
+// Fetches TMDB JSON with the configured auth strategy and normalizes API errors into exceptions.
 async function fetchTmdbJson(tmdbUrl) {
   const tmdbResponse = await fetch(tmdbUrl, getTmdbRequestOptions(tmdbUrl));
   const data = await tmdbResponse.json().catch(() => ({}));
@@ -1232,14 +1268,17 @@ async function fetchTmdbJson(tmdbUrl) {
   return data;
 }
 
+// Checks whether both Turso connection values are present.
 function isDatabaseConfigured() {
   return Boolean(TURSO_DATABASE_URL && TURSO_AUTH_TOKEN);
 }
 
+// Checks whether database sessions also have the secret needed for secure token hashing.
 function isAuthConfigured() {
   return isDatabaseConfigured() && Boolean(SESSION_SECRET);
 }
 
+// Ensures auth dependencies are ready before an account-only endpoint continues.
 async function ensureAuthReady(res) {
   if (!isDatabaseConfigured()) {
     sendJson(res, 503, {
@@ -1259,6 +1298,7 @@ async function ensureAuthReady(res) {
   return true;
 }
 
+// Returns the memoized Turso client or creates it from environment configuration.
 function getDbClient() {
   if (!isDatabaseConfigured()) {
     throw new Error("Turso database is not configured.");
@@ -1274,6 +1314,7 @@ function getDbClient() {
   return dbClient;
 }
 
+// Shares the one-time database initialization promise across concurrent requests.
 function ensureDatabaseReady() {
   if (!databaseReadyPromise) {
     databaseReadyPromise = initializeDatabase().catch((error) => {
@@ -1285,6 +1326,7 @@ function ensureDatabaseReady() {
   return databaseReadyPromise;
 }
 
+// Creates the user, session, and movie feedback tables if they do not already exist.
 async function initializeDatabase() {
   const db = getDbClient();
 
@@ -1337,6 +1379,7 @@ async function initializeDatabase() {
   );
 }
 
+// Requires a valid session user and writes the correct auth error response when missing.
 async function requireCurrentUser(req, res) {
   if (!(await ensureAuthReady(res))) {
     return null;
@@ -1352,6 +1395,7 @@ async function requireCurrentUser(req, res) {
   return user;
 }
 
+// Reads the current user from the session cookie without forcing the request to be authenticated.
 async function getOptionalCurrentUser(req) {
   if (!isAuthConfigured()) {
     return null;
@@ -1378,6 +1422,7 @@ async function getOptionalCurrentUser(req) {
   return result.rows[0] ? formatUserRow(result.rows[0]) : null;
 }
 
+// Looks up one user by primary key and formats it for server-side use.
 async function getUserById(userId) {
   const result = await getDbClient().execute({
     sql: "SELECT * FROM users WHERE id = ? LIMIT 1",
@@ -1387,6 +1432,7 @@ async function getUserById(userId) {
   return result.rows[0] ? formatUserRow(result.rows[0]) : null;
 }
 
+// Converts a database user row into the camelCase shape used by the app.
 function formatUserRow(row) {
   return {
     id: Number(row.id),
@@ -1396,6 +1442,7 @@ function formatUserRow(row) {
   };
 }
 
+// Strips server-only account fields before sending user data to the browser.
 function serializeUser(user) {
   if (!user) {
     return null;
@@ -1409,6 +1456,7 @@ function serializeUser(user) {
   };
 }
 
+// Validates and trims account form input into safe username, display name, and password values.
 function sanitizeAuthInput(body) {
   const username = String(body.username || "")
     .trim()
@@ -1428,12 +1476,14 @@ function sanitizeAuthInput(body) {
   };
 }
 
+// Hashes a password with scrypt, a per-password salt, and the configured key length.
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
   const key = await scryptAsync(password, salt, PASSWORD_KEY_LENGTH);
   return `scrypt$${salt}$${key.toString("hex")}`;
 }
 
+// Verifies a password by recomputing its scrypt hash and comparing in constant time.
 async function verifyPassword(password, passwordHash) {
   const [scheme, salt, storedHash] = String(passwordHash || "").split("$");
 
@@ -1451,6 +1501,7 @@ async function verifyPassword(password, passwordHash) {
   return crypto.timingSafeEqual(key, storedBuffer);
 }
 
+// Creates and stores a session token while returning only the raw token for the cookie.
 async function createSession(userId) {
   const token = crypto.randomBytes(32).toString("base64url");
 
@@ -1463,6 +1514,7 @@ async function createSession(userId) {
   return token;
 }
 
+// Hashes session tokens with the app secret before they touch persistent storage.
 function createSessionHash(token) {
   return crypto
     .createHmac("sha256", SESSION_SECRET)
@@ -1470,6 +1522,7 @@ function createSessionHash(token) {
     .digest("hex");
 }
 
+// Extracts and decodes a named cookie value from the request header.
 function getCookie(req, name) {
   const cookies = String(req.headers.cookie || "")
     .split(";")
@@ -1493,6 +1546,7 @@ function getCookie(req, name) {
   return "";
 }
 
+// Writes the session cookie with HttpOnly, SameSite, and optional Secure protections.
 function setSessionCookie(req, res, token) {
   const maxAgeSeconds = Math.floor(SESSION_DURATION_MS / 1000);
   const cookieParts = [
@@ -1510,6 +1564,7 @@ function setSessionCookie(req, res, token) {
   res.setHeader("Set-Cookie", cookieParts.join("; "));
 }
 
+// Expires the session cookie in the browser after logout or invalid-session cleanup.
 function clearSessionCookie(req, res) {
   const cookieParts = [
     `${SESSION_COOKIE_NAME}=`,
@@ -1526,6 +1581,7 @@ function clearSessionCookie(req, res) {
   res.setHeader("Set-Cookie", cookieParts.join("; "));
 }
 
+// Detects HTTPS directly or through common proxy headers before setting Secure cookies.
 function isSecureRequest(req) {
   return (
     req.headers["x-forwarded-proto"] === "https" ||
@@ -1534,6 +1590,7 @@ function isSecureRequest(req) {
   );
 }
 
+// Loads recent feedback and groups it into liked, disliked, watched, and watchlist buckets.
 async function getTasteProfile(userId, limit = TASTE_PROMPT_LIMIT) {
   const result = await getDbClient().execute({
     sql:
@@ -1553,6 +1610,7 @@ async function getTasteProfile(userId, limit = TASTE_PROMPT_LIMIT) {
   };
 }
 
+// Provides an empty taste profile shape for anonymous requests.
 function createEmptyTasteProfile() {
   return {
     feedback: [],
@@ -1563,6 +1621,7 @@ function createEmptyTasteProfile() {
   };
 }
 
+// Formats a movie feedback database row into the browser-facing shape.
 function formatFeedbackRow(row) {
   const tmdbId = Number(row.tmdb_id || row.tmdbId || 0);
 
@@ -1581,6 +1640,7 @@ function formatFeedbackRow(row) {
   };
 }
 
+// Sanitizes movie feedback input before it is inserted or updated in Turso.
 function sanitizeMovieFeedback(body) {
   const title = String(body.title || body.movie?.title || "")
     .trim()
@@ -1607,6 +1667,7 @@ function sanitizeMovieFeedback(body) {
   };
 }
 
+// Normalizes UI feedback labels into the finite set stored in the database.
 function normalizeFeedbackStatus(value) {
   const status = String(value || "")
     .trim()
@@ -1624,6 +1685,7 @@ function normalizeFeedbackStatus(value) {
   return FEEDBACK_STATUS_VALUES.has(status) ? status : "";
 }
 
+// Accepts only positive integer TMDB ids and returns them as strings for storage.
 function sanitizeTmdbId(value) {
   const tmdbId = Number(value);
 
@@ -1634,11 +1696,13 @@ function sanitizeTmdbId(value) {
   return String(Math.trunc(tmdbId));
 }
 
+// Allows only http and https URLs for poster and TMDB link fields.
 function sanitizeOptionalUrl(value) {
   const url = String(value || "").trim().slice(0, 500);
   return /^https?:\/\//i.test(url) ? url : "";
 }
 
+// Finds an existing feedback row by TMDB id first, then by normalized title and year.
 async function findExistingFeedback(userId, feedback) {
   if (feedback.tmdbId) {
     const byTmdbId = await getDbClient().execute({
@@ -1663,6 +1727,7 @@ async function findExistingFeedback(userId, feedback) {
   return byTitle.rows[0] || null;
 }
 
+// Loads one feedback record for the current user after a write confirms its id.
 async function getFeedbackById(userId, feedbackId) {
   const result = await getDbClient().execute({
     sql: "SELECT * FROM movie_feedback WHERE user_id = ? AND id = ? LIMIT 1",
@@ -1672,6 +1737,7 @@ async function getFeedbackById(userId, feedbackId) {
   return result.rows[0] ? formatFeedbackRow(result.rows[0]) : null;
 }
 
+// Builds the final Gemini chat prompt from the base instructions, selected picks, and taste history.
 function buildChatSystemPrompt(favoriteMovies, tasteProfile) {
   const promptParts = [movieSystemPrompt];
   const tastePrompt = buildTasteProfilePrompt(tasteProfile);
@@ -1691,6 +1757,7 @@ function buildChatSystemPrompt(favoriteMovies, tasteProfile) {
   return promptParts.join(" ");
 }
 
+// Converts saved feedback into compact natural-language guidance for Gemini.
 function buildTasteProfilePrompt(tasteProfile) {
   if (!tasteProfile?.feedback?.length) {
     return "";
@@ -1728,14 +1795,17 @@ function buildTasteProfilePrompt(tasteProfile) {
   return parts.join(" ");
 }
 
+// Joins a limited number of feedback movies into a short prompt-safe list.
 function formatProfileMovieList(movies) {
   return movies.slice(0, TASTE_PROMPT_LIMIT).map(formatFeedbackMovieLabel).join(", ");
 }
 
+// Formats one saved movie as Title or Title (Year) for prompts and labels.
 function formatFeedbackMovieLabel(movie) {
   return movie.year ? `${movie.title} (${movie.year})` : movie.title;
 }
 
+// Converts watched and disliked feedback into exclusion candidates for recommendations.
 function getTasteExcludedMovies(tasteProfile) {
   return (tasteProfile?.feedback || [])
     .filter((movie) => ["liked", "disliked", "watched"].includes(movie.status))
@@ -1746,10 +1816,12 @@ function getTasteExcludedMovies(tasteProfile) {
     }));
 }
 
+// Detects uniqueness errors from Turso without depending on one exact driver message.
 function isUniqueConstraintError(error) {
   return /constraint|unique/i.test(String(error?.message || error));
 }
 
+// Matches a free-text query against aliases and official TMDB genre names.
 function findGenreMatch(query) {
   const normalizedQuery = normalizeSearchTerm(query);
 
@@ -1786,6 +1858,7 @@ function findGenreMatch(query) {
   };
 }
 
+// Lowercases and strips punctuation so titles, genres, and aliases compare consistently.
 function normalizeSearchTerm(value) {
   return String(value || "")
     .toLowerCase()
@@ -1795,10 +1868,12 @@ function normalizeSearchTerm(value) {
     .replace(/\s+/g, " ");
 }
 
+// Checks whether a normalized phrase appears as a whole phrase within another normalized value.
 function containsNormalizedPhrase(value, phrase) {
   return ` ${value} `.includes(` ${phrase} `);
 }
 
+// Filters TMDB movies to English-language entries with posters and visible titles.
 function isUsableEnglishMovie(movie) {
   return Boolean(
     movie?.id &&
@@ -1809,6 +1884,7 @@ function isUsableEnglishMovie(movie) {
   );
 }
 
+// Removes duplicate TMDB movies while preserving the first useful ordering.
 function uniqueMovies(movies) {
   const seen = new Set();
   const unique = [];
@@ -1825,6 +1901,7 @@ function uniqueMovies(movies) {
   return unique;
 }
 
+// Converts a TMDB movie into the small poster-wall tile shape.
 function formatPosterMovie(movie) {
   return {
     id: movie.id,
@@ -1833,6 +1910,7 @@ function formatPosterMovie(movie) {
   };
 }
 
+// Converts a TMDB movie into the recommendation-card shape expected by the browser.
 function formatRelatedMovie(movie) {
   return {
     id: movie.id,
@@ -1846,6 +1924,7 @@ function formatRelatedMovie(movie) {
   };
 }
 
+// Extracts the first Gemini candidate text into a plain string.
 function extractGeminiText(data) {
   return (
     data.candidates?.[0]?.content?.parts
@@ -1855,6 +1934,7 @@ function extractGeminiText(data) {
   );
 }
 
+// Parses Gemini JSON even when the model wraps it in markdown fences or surrounding text.
 function parseGeminiJson(text) {
   const trimmed = String(text || "")
     .trim()
@@ -1883,6 +1963,7 @@ function parseGeminiJson(text) {
   }
 }
 
+// Sanitizes Gemini recommendation objects and removes duplicates or already-selected titles.
 function normalizeGeminiRecommendations(recommendations, favoriteMovies) {
   const excludedMovies = createExcludedMovieSet(favoriteMovies);
   const seenTitles = new Set();
@@ -1929,6 +2010,7 @@ function normalizeGeminiRecommendations(recommendations, favoriteMovies) {
     .slice(0, 3);
 }
 
+// Collapses whitespace and strips wrapper quotes from model-generated recommendation copy.
 function cleanRecommendationCopy(value) {
   return String(value || "")
     .trim()
@@ -1936,6 +2018,7 @@ function cleanRecommendationCopy(value) {
     .replace(/^["']|["']$/g, "");
 }
 
+// Creates Gemini generation settings and disables thinking for the configured Flash model when supported.
 function createPickRecommendationGenerationConfig({
   temperature,
   maxOutputTokens
@@ -1954,6 +2037,7 @@ function createPickRecommendationGenerationConfig({
   return config;
 }
 
+// Builds the TMDB similar or recommendations URL for a selected movie id.
 function createMovieSuggestionsUrl(movieId, suggestionType) {
   const safeSuggestionType =
     suggestionType === "similar" ? "similar" : "recommendations";
@@ -1967,6 +2051,7 @@ function createMovieSuggestionsUrl(movieId, suggestionType) {
   return tmdbUrl;
 }
 
+// Scores and deduplicates one TMDB fallback candidate against the user's selected picks.
 function addSuggestionCandidate(
   candidateMap,
   movie,
@@ -2010,6 +2095,7 @@ function addSuggestionCandidate(
   candidate.pickIndexes.add(pickIndex);
 }
 
+// Checks whether a TMDB movie can become a visible fallback recommendation card.
 function isUsableRecommendationMovie(movie) {
   return Boolean(
     movie?.id &&
@@ -2019,6 +2105,7 @@ function isUsableRecommendationMovie(movie) {
   );
 }
 
+// Explains why a TMDB fallback was chosen when Gemini detail is unavailable.
 function buildFallbackFitReason(pickCount) {
   if (pickCount > 1) {
     return "It overlaps with more than one of your picks, so it is the fallback match with the strongest shared signal.";
@@ -2027,6 +2114,7 @@ function buildFallbackFitReason(pickCount) {
   return "It shares recommendation signals with one of your picks, with ratings and popularity used as guardrails.";
 }
 
+// Merges Gemini-enriched results with TMDB fallbacks without duplicating cards.
 function mergeRecommendationResults(primaryResults, fallbackResults) {
   const seen = new Set();
   const merged = [];
@@ -2047,6 +2135,7 @@ function mergeRecommendationResults(primaryResults, fallbackResults) {
   return merged;
 }
 
+// Builds id and title lookup sets for movies that should not be recommended again.
 function createExcludedMovieSet(favoriteMovies) {
   return {
     ids: new Set(
@@ -2062,10 +2151,12 @@ function createExcludedMovieSet(favoriteMovies) {
   };
 }
 
+// Formats a selected favorite movie as Title or Title (Year) for response metadata.
 function formatFavoriteMovieLabel(movie) {
   return movie.year ? `${movie.title} (${movie.year})` : movie.title;
 }
 
+// Picks random TMDB page numbers while avoiding already-sampled pages where possible.
 function getRandomPages(pageCount, count, excludePages = []) {
   const excluded = new Set(excludePages);
   const pages = new Set();
@@ -2088,6 +2179,7 @@ function getRandomPages(pageCount, count, excludePages = []) {
   return [...pages];
 }
 
+// Clamps a number into a fixed range and falls back to the minimum for invalid input.
 function clampNumber(value, min, max) {
   if (!Number.isFinite(value)) {
     return min;
@@ -2096,6 +2188,7 @@ function clampNumber(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+// Serves static files from the public directory while preventing path traversal.
 function serveStatic(pathname, res) {
   const requestedPath = pathname === "/" ? "/index.html" : pathname;
   const decodedPath = decodeURIComponent(requestedPath);
@@ -2120,6 +2213,7 @@ function serveStatic(pathname, res) {
   });
 }
 
+// Sanitizes chat history into the short Gemini-compatible transcript shape.
 function sanitizeMessages(messages) {
   if (!Array.isArray(messages)) {
     return [];
@@ -2134,6 +2228,7 @@ function sanitizeMessages(messages) {
     .filter((message) => message.text.length > 0);
 }
 
+// Sanitizes selected favorite movies into concise prompt labels.
 function sanitizeFavoriteMovies(favoriteMovies) {
   if (!Array.isArray(favoriteMovies)) {
     return [];
@@ -2158,6 +2253,7 @@ function sanitizeFavoriteMovies(favoriteMovies) {
     .filter(Boolean);
 }
 
+// Sanitizes selected favorite movies into structured data for recommendation logic.
 function sanitizeFavoriteMovieDetails(favoriteMovies) {
   if (!Array.isArray(favoriteMovies)) {
     return [];
@@ -2189,6 +2285,7 @@ function sanitizeFavoriteMovieDetails(favoriteMovies) {
     .filter(Boolean);
 }
 
+// Reads and parses a JSON request body with a small size guard.
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -2213,16 +2310,19 @@ function readJsonBody(req) {
   });
 }
 
+// Sends a JSON response with the project's standard content type.
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
 }
 
+// Sends a plain-text response for simple static-file errors.
 function sendText(res, status, text) {
   res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" });
   res.end(text);
 }
 
+// Chooses TMDB bearer-token auth when available and otherwise appends the API key query parameter.
 function getTmdbRequestOptions(tmdbUrl) {
   const headers = {};
 
@@ -2235,6 +2335,7 @@ function getTmdbRequestOptions(tmdbUrl) {
   return { headers };
 }
 
+// Treats blank or placeholder environment values as missing secrets.
 function cleanSecret(value) {
   const secret = String(value || "").trim();
 
@@ -2250,6 +2351,7 @@ function cleanSecret(value) {
   return secret;
 }
 
+// Loads simple KEY=value pairs from the local .env file without overriding existing environment variables.
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
     return;
