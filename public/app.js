@@ -2,6 +2,7 @@ const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
 const messagesEl = document.querySelector("#messages");
 const statusPill = document.querySelector("#status-pill");
+const homeView = document.querySelector("#home-view");
 const movieSearchModal = document.querySelector("#movie-search-modal");
 const movieSearchClose = document.querySelector("#movie-search-close");
 const movieSearchTitle = document.querySelector("#movie-search-title");
@@ -11,6 +12,7 @@ const movieSearchStatus = document.querySelector("#movie-search-status");
 const posterGrid = document.querySelector("#poster-grid");
 const posterWall = document.querySelector("#poster-wall");
 const pickSearchButton = document.querySelector("#pick-search-button");
+const pickResultsButton = document.querySelector("#pick-results-button");
 const genreActorForm = document.querySelector("#genre-actor-form");
 const genreActorInput = document.querySelector("#genre-actor-input");
 const relatedResultsModal = document.querySelector("#related-results-modal");
@@ -34,10 +36,31 @@ const accountSubmit = document.querySelector("#account-submit");
 const accountStatus = document.querySelector("#account-status");
 const accountProfileStatus = document.querySelector("#account-profile-status");
 const accountLogoutButton = document.querySelector("#account-logout-button");
+const accountMenu = document.querySelector("#account-menu");
+const accountMenuTaste = document.querySelector("#account-menu-taste");
+const accountMenuWatchlist = document.querySelector("#account-menu-watchlist");
+const accountMenuLogout = document.querySelector("#account-menu-logout");
 const accountModeButtons = Array.from(document.querySelectorAll("[data-auth-mode]"));
 const accountRegisterOnlyFields = Array.from(
   document.querySelectorAll("[data-register-only]")
 );
+const wantWatchButton = document.querySelector("#want-watch-button");
+const watchlistPage = document.querySelector("#watchlist-page");
+const watchlistBack = document.querySelector("#watchlist-back");
+const watchlistStatus = document.querySelector("#watchlist-status");
+const watchlistGrid = document.querySelector("#watchlist-grid");
+const tasteProfileModal = document.querySelector("#taste-profile-modal");
+const tasteProfileClose = document.querySelector("#taste-profile-close");
+const tasteProfileStatus = document.querySelector("#taste-profile-status");
+const tasteProfileLikes = document.querySelector("#taste-profile-likes");
+const tasteProfileDislikes = document.querySelector("#taste-profile-dislikes");
+const movieFeedbackModal = document.querySelector("#movie-feedback-modal");
+const movieFeedbackClose = document.querySelector("#movie-feedback-close");
+const movieFeedbackTitle = document.querySelector("#movie-feedback-title");
+const movieFeedbackBody = document.querySelector("#movie-feedback-body");
+const movieLikedButton = document.querySelector("#movie-liked-button");
+const movieDislikedButton = document.querySelector("#movie-disliked-button");
+const movieFeedbackStatus = document.querySelector("#movie-feedback-status");
 
 const fallbackWallPosters = [
   {
@@ -105,6 +128,8 @@ let relatedResultsReturnFocus = genreActorInput;
 let selectedRelatedMovie = null;
 let selectedRelatedMovieIsPickMatch = false;
 let lastRelatedResultsData = null;
+let lastPickRecommendationsData = null;
+let lastPickRecommendationKey = "";
 let currentPosterWallPosters = [];
 let posterWallResizeFrame = 0;
 let posterWallLayoutKey = "";
@@ -118,6 +143,11 @@ let authState = {
   user: null
 };
 let isAuthLoading = false;
+let isFeedbackLoading = false;
+let watchlistReturnFocus = accountButton;
+let tasteProfileReturnFocus = accountButton;
+let movieFeedbackReturnFocus = null;
+let selectedWatchlistMovie = null;
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -206,8 +236,26 @@ movieSearchInput.addEventListener("keydown", (event) => {
 
 movieSearchClose.addEventListener("click", closeMoviePicker);
 relatedResultsClose.addEventListener("click", closeRelatedResults);
-accountButton.addEventListener("click", () => openAccountModal(accountButton));
+accountButton.addEventListener("click", handleAccountButtonClick);
 accountClose.addEventListener("click", closeAccountModal);
+wantWatchButton.addEventListener("click", handleWantToWatch);
+watchlistBack.addEventListener("click", () => closeWatchlist({ updateHistory: true }));
+tasteProfileClose.addEventListener("click", closeTasteProfile);
+movieFeedbackClose.addEventListener("click", closeMovieFeedbackModal);
+movieLikedButton.addEventListener("click", () => handleWatchlistFeedback("liked"));
+movieDislikedButton.addEventListener("click", () => handleWatchlistFeedback("disliked"));
+accountMenuTaste.addEventListener("click", () => {
+  closeAccountMenu();
+  openTasteProfile(accountButton);
+});
+accountMenuWatchlist.addEventListener("click", () => {
+  closeAccountMenu();
+  openWatchlist(accountButton);
+});
+accountMenuLogout.addEventListener("click", () => {
+  closeAccountMenu();
+  handleAccountLogout();
+});
 
 accountModeButtons.forEach((button) => {
   button.addEventListener("click", () => {
@@ -236,6 +284,18 @@ accountModal.addEventListener("click", (event) => {
   }
 });
 
+tasteProfileModal.addEventListener("click", (event) => {
+  if (event.target === tasteProfileModal) {
+    closeTasteProfile();
+  }
+});
+
+movieFeedbackModal.addEventListener("click", (event) => {
+  if (event.target === movieFeedbackModal) {
+    closeMovieFeedbackModal();
+  }
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !movieSearchModal.hidden) {
     closeMoviePicker();
@@ -249,6 +309,26 @@ document.addEventListener("keydown", (event) => {
 
   if (event.key === "Escape" && !accountModal.hidden) {
     closeAccountModal();
+    return;
+  }
+
+  if (event.key === "Escape" && !movieFeedbackModal.hidden) {
+    closeMovieFeedbackModal();
+    return;
+  }
+
+  if (event.key === "Escape" && !watchlistPage.hidden) {
+    closeWatchlist({ updateHistory: true });
+    return;
+  }
+
+  if (event.key === "Escape" && !tasteProfileModal.hidden) {
+    closeTasteProfile();
+    return;
+  }
+
+  if (event.key === "Escape" && !accountMenu.hidden) {
+    closeAccountMenu();
   }
 });
 
@@ -256,10 +336,18 @@ document.addEventListener("click", (event) => {
   if (!movieSearchModal.hidden && !event.target.closest(".movie-search-popover")) {
     closeResults();
   }
+
+  if (!accountMenu.hidden && !event.target.closest(".account-corner")) {
+    closeAccountMenu();
+  }
 });
 
 pickSearchButton.addEventListener("click", () => {
   searchPickRecommendations();
+});
+
+pickResultsButton.addEventListener("click", () => {
+  showLastPickRecommendations();
 });
 
 genreActorForm.addEventListener("submit", (event) => {
@@ -275,10 +363,14 @@ genreActorForm.addEventListener("submit", (event) => {
   searchRelatedMovies(text);
 });
 
+window.addEventListener("popstate", syncViewFromLocation);
+window.addEventListener("hashchange", syncViewFromLocation);
+
 renderPosterSlots();
 loadPosterWall();
 setAccountMode("login");
 loadAuthState();
+syncViewFromLocation();
 
 if (posterWall) {
   window.addEventListener("resize", schedulePosterWallRender);
@@ -391,6 +483,7 @@ async function searchPickRecommendations() {
       throw new Error(data.error || "Recommendation search failed.");
     }
 
+    cachePickRecommendations(data);
     renderRelatedResults(data);
   } catch (error) {
     relatedResultsTitle.textContent = "No matches";
@@ -520,6 +613,21 @@ function addSelectedMovie(movie) {
   renderPosterSlots();
 }
 
+function cachePickRecommendations(data) {
+  lastPickRecommendationsData = data;
+  lastPickRecommendationKey = getSelectedMovieKey();
+  updatePickSearchButtonState();
+}
+
+function showLastPickRecommendations() {
+  if (isRelatedLoading || !hasCurrentPickRecommendations()) {
+    return;
+  }
+
+  openRelatedResults(pickResultsButton);
+  renderRelatedResults(lastPickRecommendationsData);
+}
+
 function renderPosterSlots() {
   posterGrid.replaceChildren();
 
@@ -581,6 +689,8 @@ function renderPosterSlots() {
     slot.append(frame, title, meta);
     posterGrid.append(slot);
   });
+
+  updatePickSearchButtonState();
 }
 
 function openMoviePicker(slotIndex) {
@@ -958,6 +1068,7 @@ function renderRelatedResults(data) {
   selectedRelatedMovie = null;
   selectedRelatedMovieIsPickMatch = false;
   relatedResultsModal.classList.remove("detail-open");
+  renderWantWatchButton();
 
   const existingBackButton = relatedResultsModal.querySelector(".related-results-back");
   if (existingBackButton) {
@@ -1071,13 +1182,17 @@ function renderRelatedMovieDetail() {
   backButton.type = "button";
   backButton.className = "related-results-back";
   backButton.innerHTML = "← <span class=\"sr-only\">Back to suggestions</span>";
+  backButton.textContent = "Back";
   backButton.setAttribute("aria-label", "Back to suggestions");
   backButton.addEventListener("click", () => renderRelatedResults(lastRelatedResultsData));
   relatedResultsStatus.after(backButton);
 
   if (!selectedRelatedMovie) {
+    renderWantWatchButton();
     return;
   }
+
+  renderWantWatchButton();
 
   const detail = document.createElement("article");
   detail.className = "related-movie-detail";
@@ -1305,11 +1420,500 @@ function closeRelatedResults() {
   relatedResultsModal.hidden = true;
   relatedResultsGrid.replaceChildren();
   relatedResultsStatus.textContent = "";
+  selectedRelatedMovie = null;
+  selectedRelatedMovieIsPickMatch = false;
+  relatedResultsModal.classList.remove("detail-open");
+  renderWantWatchButton();
   document.body.classList.remove("search-open");
 
   if (relatedResultsReturnFocus?.focus) {
     relatedResultsReturnFocus.focus();
   }
+}
+
+function handleAccountButtonClick() {
+  if (authState.user) {
+    toggleAccountMenu();
+    return;
+  }
+
+  openAccountModal(accountButton);
+}
+
+function toggleAccountMenu() {
+  if (accountMenu.hidden) {
+    openAccountMenu();
+    return;
+  }
+
+  closeAccountMenu();
+}
+
+function openAccountMenu() {
+  accountMenu.hidden = false;
+  accountButton.setAttribute("aria-expanded", "true");
+}
+
+function closeAccountMenu() {
+  accountMenu.hidden = true;
+  accountButton.setAttribute("aria-expanded", "false");
+}
+
+function renderWantWatchButton() {
+  const hasSelectedMovie = Boolean(selectedRelatedMovie);
+  wantWatchButton.hidden = !hasSelectedMovie;
+  wantWatchButton.disabled = !hasSelectedMovie || isFeedbackLoading;
+  wantWatchButton.textContent = isFeedbackLoading ? "Saving..." : "Want to Watch";
+}
+
+async function handleWantToWatch() {
+  if (isFeedbackLoading || !selectedRelatedMovie) {
+    return;
+  }
+
+  const canSave = await requireSignedIn({
+    message: "Log in to save this to your watch list.",
+    returnFocusElement: wantWatchButton,
+    statusElement: relatedResultsStatus
+  });
+
+  if (!canSave) {
+    return;
+  }
+
+  setFeedbackLoading(true);
+
+  try {
+    await saveMovieFeedback(selectedRelatedMovie, "want_to_watch", "recommendation");
+    relatedResultsStatus.textContent = "Saved to your watch list.";
+  } catch (error) {
+    relatedResultsStatus.textContent = error.message;
+  } finally {
+    setFeedbackLoading(false);
+    renderWantWatchButton();
+  }
+}
+
+async function openWatchlist(returnFocusElement = accountButton, options = {}) {
+  const canOpen = await requireSignedIn({
+    message: "Log in to see your watch list.",
+    returnFocusElement
+  });
+
+  if (!canOpen) {
+    return;
+  }
+
+  watchlistReturnFocus = returnFocusElement || accountButton;
+  homeView.hidden = true;
+  watchlistPage.hidden = false;
+  document.body.classList.add("watchlist-view");
+  updateLibraryBodyLock();
+  watchlistStatus.textContent = "Loading watch list...";
+  watchlistGrid.replaceChildren();
+
+  if (options.updateHistory !== false && window.location.hash !== "#watchlist") {
+    history.pushState({ view: "watchlist" }, "", "#watchlist");
+  }
+
+  window.scrollTo({ top: 0, left: 0 });
+  window.requestAnimationFrame(() => watchlistBack.focus());
+  loadWatchlist();
+}
+
+function closeWatchlist(options = {}) {
+  closeMovieFeedbackModal({ preserveFocus: true });
+  watchlistPage.hidden = true;
+  homeView.hidden = false;
+  document.body.classList.remove("watchlist-view");
+  watchlistStatus.textContent = "";
+  watchlistGrid.replaceChildren();
+  updateLibraryBodyLock();
+
+  if (options.updateHistory && window.location.hash === "#watchlist") {
+    history.replaceState(
+      { view: "home" },
+      "",
+      `${window.location.pathname}${window.location.search}`
+    );
+  }
+
+  window.scrollTo({ top: 0, left: 0 });
+
+  if (watchlistReturnFocus?.focus) {
+    watchlistReturnFocus.focus();
+  }
+}
+
+function syncViewFromLocation() {
+  if (window.location.hash === "#watchlist") {
+    openWatchlist(accountButton, { updateHistory: false });
+    return;
+  }
+
+  if (!watchlistPage.hidden) {
+    closeWatchlist({ updateHistory: false });
+  }
+}
+
+async function loadWatchlist() {
+  try {
+    const movies = await fetchMovieFeedback("want_to_watch");
+    renderWatchlist(movies);
+  } catch (error) {
+    watchlistStatus.textContent = error.message;
+    watchlistGrid.replaceChildren();
+  }
+}
+
+function renderWatchlist(movies) {
+  watchlistGrid.replaceChildren();
+
+  if (!movies.length) {
+    watchlistStatus.textContent = "Your watch list is empty.";
+    return;
+  }
+
+  watchlistStatus.textContent = `${movies.length} saved movie${
+    movies.length === 1 ? "" : "s"
+  }.`;
+
+  movies.forEach((movie) => {
+    watchlistGrid.append(createWatchlistCard(movie));
+  });
+}
+
+function createWatchlistCard(movie) {
+  const card = document.createElement("article");
+  card.className = "watchlist-card";
+
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "watchlist-movie-button";
+  openButton.setAttribute(
+    "aria-label",
+    `Open feedback for ${formatMovieTitle(movie)}`
+  );
+  openButton.addEventListener("click", () => openMovieFeedbackModal(movie, openButton));
+
+  const poster = document.createElement("div");
+  poster.className = "watchlist-poster";
+
+  if (movie.posterUrl) {
+    const image = document.createElement("img");
+    image.src = movie.posterUrl;
+    image.alt = `${movie.title} poster`;
+    image.loading = "lazy";
+    poster.append(image);
+  } else {
+    poster.textContent = "No art";
+  }
+
+  openButton.append(poster);
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.className = "watchlist-remove-button";
+  removeButton.textContent = "Remove";
+  removeButton.addEventListener("click", () => removeWatchlistMovie(movie));
+
+  card.append(openButton, removeButton);
+  return card;
+}
+
+async function removeWatchlistMovie(movie) {
+  if (isFeedbackLoading) {
+    return;
+  }
+
+  setFeedbackLoading(true);
+  watchlistStatus.textContent = `Removing ${formatMovieTitle(movie)}...`;
+
+  try {
+    await deleteMovieFeedback(movie);
+    await loadWatchlist();
+  } catch (error) {
+    watchlistStatus.textContent = error.message;
+  } finally {
+    setFeedbackLoading(false);
+  }
+}
+
+function openMovieFeedbackModal(movie, returnFocusElement) {
+  selectedWatchlistMovie = movie;
+  movieFeedbackReturnFocus = returnFocusElement || watchlistBack;
+  movieFeedbackTitle.textContent = formatMovieTitle(movie);
+  movieFeedbackStatus.textContent = "";
+  movieFeedbackBody.replaceChildren(createMovieFeedbackSummary(movie));
+  movieFeedbackModal.hidden = false;
+  updateLibraryBodyLock();
+
+  window.requestAnimationFrame(() => movieLikedButton.focus());
+}
+
+function closeMovieFeedbackModal(options = {}) {
+  if (movieFeedbackModal.hidden) {
+    return;
+  }
+
+  movieFeedbackModal.hidden = true;
+  movieFeedbackStatus.textContent = "";
+  movieFeedbackBody.replaceChildren();
+  selectedWatchlistMovie = null;
+  updateLibraryBodyLock();
+
+  if (!options.preserveFocus && movieFeedbackReturnFocus?.focus) {
+    movieFeedbackReturnFocus.focus();
+  }
+}
+
+function createMovieFeedbackSummary(movie) {
+  const summary = document.createElement("div");
+  summary.className = "movie-feedback-summary";
+
+  const poster = document.createElement("div");
+  poster.className = "watchlist-poster";
+
+  if (movie.posterUrl) {
+    const image = document.createElement("img");
+    image.src = movie.posterUrl;
+    image.alt = `${movie.title} poster`;
+    poster.append(image);
+  } else {
+    poster.textContent = "No art";
+  }
+
+  const copy = document.createElement("p");
+  copy.textContent = "Move this movie into your taste profile.";
+
+  summary.append(poster, copy);
+  return summary;
+}
+
+async function handleWatchlistFeedback(status) {
+  if (isFeedbackLoading || !selectedWatchlistMovie) {
+    return;
+  }
+
+  setFeedbackLoading(true);
+  movieFeedbackStatus.textContent =
+    status === "liked" ? "Saving to likes..." : "Saving to dislikes...";
+
+  try {
+    await saveMovieFeedback(selectedWatchlistMovie, status, "watchlist");
+    const savedMessage =
+      status === "liked" ? "Moved to likes." : "Moved to dislikes.";
+    closeMovieFeedbackModal({ preserveFocus: true });
+    await loadWatchlist();
+    watchlistStatus.textContent = savedMessage;
+    watchlistBack.focus();
+  } catch (error) {
+    const statusElement = movieFeedbackModal.hidden
+      ? watchlistStatus
+      : movieFeedbackStatus;
+    statusElement.textContent = error.message;
+  } finally {
+    setFeedbackLoading(false);
+  }
+}
+
+async function openTasteProfile(returnFocusElement = accountButton) {
+  const canOpen = await requireSignedIn({
+    message: "Log in to see your taste profile.",
+    returnFocusElement
+  });
+
+  if (!canOpen) {
+    return;
+  }
+
+  tasteProfileReturnFocus = returnFocusElement || accountButton;
+  tasteProfileModal.hidden = false;
+  updateLibraryBodyLock();
+  tasteProfileStatus.textContent = "Loading taste profile...";
+  tasteProfileLikes.replaceChildren();
+  tasteProfileDislikes.replaceChildren();
+
+  window.requestAnimationFrame(() => tasteProfileClose.focus());
+  loadTasteProfile();
+}
+
+function closeTasteProfile() {
+  tasteProfileModal.hidden = true;
+  tasteProfileStatus.textContent = "";
+  tasteProfileLikes.replaceChildren();
+  tasteProfileDislikes.replaceChildren();
+  updateLibraryBodyLock();
+
+  if (tasteProfileReturnFocus?.focus) {
+    tasteProfileReturnFocus.focus();
+  }
+}
+
+async function loadTasteProfile() {
+  try {
+    const response = await fetch("/api/profile");
+    const data = await readJsonResponse(response);
+
+    if (!response.ok) {
+      throw new Error(data.error || "Could not load your taste profile.");
+    }
+
+    const tasteProfile = data.tasteProfile || {};
+    const likes = Array.isArray(tasteProfile.liked) ? tasteProfile.liked : [];
+    const dislikes = Array.isArray(tasteProfile.disliked)
+      ? tasteProfile.disliked
+      : [];
+
+    renderTasteList(tasteProfileLikes, likes, "No liked movies yet.");
+    renderTasteList(tasteProfileDislikes, dislikes, "No disliked movies yet.");
+    tasteProfileStatus.textContent = "Saved feedback from your account.";
+  } catch (error) {
+    tasteProfileStatus.textContent = error.message;
+    tasteProfileLikes.replaceChildren();
+    tasteProfileDislikes.replaceChildren();
+  }
+}
+
+function renderTasteList(listElement, movies, emptyText) {
+  listElement.replaceChildren();
+
+  if (!movies.length) {
+    const emptyItem = document.createElement("li");
+    emptyItem.className = "taste-profile-empty";
+    emptyItem.textContent = emptyText;
+    listElement.append(emptyItem);
+    return;
+  }
+
+  movies.forEach((movie) => {
+    const item = document.createElement("li");
+    item.textContent = formatMovieTitle(movie);
+    listElement.append(item);
+  });
+}
+
+async function fetchMovieFeedback(status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await fetch(`/api/movies/feedback${query}`);
+  const data = await readJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not load saved movies.");
+  }
+
+  return Array.isArray(data.feedback) ? data.feedback : [];
+}
+
+async function saveMovieFeedback(movie, status, source) {
+  const response = await fetch("/api/movies/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(createMovieFeedbackPayload(movie, status, source))
+  });
+  const data = await readJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not save movie feedback.");
+  }
+
+  return data.feedback;
+}
+
+async function deleteMovieFeedback(movie) {
+  const params = new URLSearchParams();
+
+  if (movie.id) {
+    params.set("id", movie.id);
+  } else {
+    const tmdbId = getMovieTmdbId(movie);
+
+    if (tmdbId) {
+      params.set("tmdbId", tmdbId);
+    } else {
+      params.set("title", movie.title || "");
+      params.set("year", movie.year || "");
+    }
+  }
+
+  const response = await fetch(`/api/movies/feedback?${params.toString()}`, {
+    method: "DELETE"
+  });
+  const data = await readJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not remove movie feedback.");
+  }
+
+  return data;
+}
+
+function createMovieFeedbackPayload(movie, status, source) {
+  return {
+    tmdbId: getMovieTmdbId(movie),
+    title: movie.title || "",
+    year: movie.year || "",
+    posterUrl: movie.posterUrl || "",
+    tmdbUrl: movie.tmdbUrl || "",
+    status,
+    source
+  };
+}
+
+function getMovieTmdbId(movie) {
+  if (movie?.tmdbId || movie?.tmdb_id) {
+    return movie.tmdbId || movie.tmdb_id;
+  }
+
+  if (movie?.status || movie?.createdAt || movie?.updatedAt) {
+    return "";
+  }
+
+  return movie?.id || "";
+}
+
+async function requireSignedIn({ message, returnFocusElement, statusElement } = {}) {
+  if (authState.authConfigured === null) {
+    await loadAuthState();
+  }
+
+  if (authState.user) {
+    return true;
+  }
+
+  const statusMessage =
+    authState.authConfigured === false
+      ? "Accounts are not configured yet."
+      : message || "Log in to use this feature.";
+
+  if (statusElement) {
+    statusElement.textContent = statusMessage;
+  }
+
+  if (authState.authConfigured !== false) {
+    openAccountModal(returnFocusElement || accountButton);
+  }
+
+  return false;
+}
+
+function setFeedbackLoading(isLoading) {
+  isFeedbackLoading = isLoading;
+  renderWantWatchButton();
+  movieLikedButton.disabled = isLoading;
+  movieDislikedButton.disabled = isLoading;
+  Array.from(watchlistGrid.querySelectorAll(".watchlist-remove-button")).forEach(
+    (button) => {
+      button.disabled = isLoading;
+    }
+  );
+}
+
+function updateLibraryBodyLock() {
+  document.body.classList.toggle(
+    "library-open",
+    !tasteProfileModal.hidden || !movieFeedbackModal.hidden
+  );
 }
 
 async function loadAuthState() {
@@ -1406,6 +2010,7 @@ function renderAccountState() {
   accountButton.textContent = user
     ? `Hi, ${shortenAccountName(getAccountDisplayName(user))}`
     : "Login / Create Account";
+  accountButton.setAttribute("aria-haspopup", user ? "menu" : "dialog");
 
   accountSignedOut.hidden = Boolean(user);
   accountSignedIn.hidden = !user;
@@ -1419,6 +2024,10 @@ function renderAccountState() {
 
   if (!user && authState.authConfigured === false) {
     accountStatus.textContent = "Accounts are not configured yet.";
+  }
+
+  if (!user) {
+    closeAccountMenu();
   }
 
   updateAccountControlsDisabled();
@@ -1480,6 +2089,10 @@ async function handleAccountSubmit(event) {
     renderAccountState();
     accountProfileStatus.textContent = isRegister ? "Account created." : "Logged in.";
     signedIn = true;
+
+    if (window.location.hash === "#watchlist") {
+      openWatchlist(accountButton, { updateHistory: false });
+    }
   } catch (error) {
     accountStatus.textContent = error.message;
   } finally {
@@ -1496,6 +2109,7 @@ async function handleAccountLogout() {
     return;
   }
 
+  const shouldFocusModalLogin = !accountModal.hidden;
   let signedOut = false;
   setAuthLoading(true);
   accountProfileStatus.textContent = "Logging out...";
@@ -1523,7 +2137,14 @@ async function handleAccountLogout() {
     setAuthLoading(false);
 
     if (signedOut) {
-      window.requestAnimationFrame(() => accountUsername.focus());
+      window.requestAnimationFrame(() => {
+        if (shouldFocusModalLogin) {
+          accountUsername.focus();
+          return;
+        }
+
+        accountButton.focus();
+      });
     }
   }
 }
@@ -1546,6 +2167,7 @@ function updateAccountControlsDisabled() {
 
   accountButton.disabled = isAuthLoading;
   accountLogoutButton.disabled = isAuthLoading;
+  accountMenuLogout.disabled = isAuthLoading;
 
   if (!isAuthLoading) {
     accountSubmit.textContent = accountMode === "register" ? "Create account" : "Login";
@@ -1598,6 +2220,27 @@ function getFavoriteMoviePayload() {
   }));
 }
 
+function getSelectedMovieKey() {
+  return getFavoriteMoviePayload()
+    .map((movie) => String(movie.id || `${movie.title}:${movie.year || ""}`))
+    .sort()
+    .join("|");
+}
+
+function hasCurrentPickRecommendations() {
+  const selectedMovieKey = getSelectedMovieKey();
+  const hasRecommendations = Array.isArray(lastPickRecommendationsData?.results)
+    ? lastPickRecommendationsData.results.length > 0
+    : false;
+
+  return Boolean(
+    selectedMovieKey &&
+      hasRecommendations &&
+      lastPickRecommendationsData &&
+      lastPickRecommendationKey === selectedMovieKey
+  );
+}
+
 function formatMovieTitle(movie) {
   return movie.year ? `${movie.title} (${movie.year})` : movie.title;
 }
@@ -1635,5 +2278,10 @@ function setRelatedLoading(isLoading) {
 }
 
 function updatePickSearchButtonState() {
-  pickSearchButton.disabled = isChatLoading || isRelatedLoading;
+  const isMoodSearchDisabled = isChatLoading || isRelatedLoading;
+  const canShowLastPickRecommendations = hasCurrentPickRecommendations();
+
+  pickSearchButton.disabled = isMoodSearchDisabled;
+  pickResultsButton.hidden = !canShowLastPickRecommendations;
+  pickResultsButton.disabled = isRelatedLoading || !canShowLastPickRecommendations;
 }

@@ -9,11 +9,29 @@
   <body>
     <div class="poster-wall" id="poster-wall" aria-hidden="true"></div>
 
-    <main class="theater-shell">
+    <main class="theater-shell" id="home-view">
       <div class="account-corner">
-        <button class="account-button" id="account-button" type="button">
+        <button
+          class="account-button"
+          id="account-button"
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="account-menu"
+        >
           Login / Create Account
         </button>
+        <div class="account-menu" id="account-menu" role="menu" hidden>
+          <button id="account-menu-taste" type="button" role="menuitem">
+            Taste Profile
+          </button>
+          <button id="account-menu-watchlist" type="button" role="menuitem">
+            Watch List
+          </button>
+          <button id="account-menu-logout" type="button" role="menuitem">
+            Log out
+          </button>
+        </div>
       </div>
 
       <section class="marquee" aria-labelledby="site-title">
@@ -26,9 +44,19 @@
 
           <div class="poster-grid" id="poster-grid" aria-live="polite"></div>
 
-          <button class="pick-search-button" id="pick-search-button" type="button">
-            Search based on picks
-          </button>
+          <div class="mood-actions">
+            <button class="pick-search-button" id="pick-search-button" type="button">
+              Search based on picks
+            </button>
+            <button
+              class="pick-results-button"
+              id="pick-results-button"
+              type="button"
+              hidden
+            >
+              Show last suggestions
+            </button>
+          </div>
 
           <p class="tmdb-credit">
             This product uses the TMDB API but is not endorsed or certified by TMDB.
@@ -125,12 +153,22 @@
       >
         <div class="related-results-topline">
           <h2 id="related-results-title">Movie matches</h2>
-          <button
-            class="related-results-close"
-            id="related-results-close"
-            type="button"
-            aria-label="Close movie matches"
-          >x</button>
+          <div class="related-results-controls">
+            <button
+              class="feedback-action-button"
+              id="want-watch-button"
+              type="button"
+              hidden
+            >
+              Want to Watch
+            </button>
+            <button
+              class="related-results-close"
+              id="related-results-close"
+              type="button"
+              aria-label="Close movie matches"
+            >x</button>
+          </div>
         </div>
 
         <p class="related-results-status" id="related-results-status" role="status"></p>
@@ -227,6 +265,83 @@
           </button>
           <p class="account-status" id="account-profile-status" role="status"></p>
         </div>
+      </section>
+    </div>
+
+    <main class="watchlist-page" id="watchlist-page" hidden>
+      <div class="watchlist-page-shell">
+        <header class="watchlist-page-header">
+          <button class="watchlist-back-button" id="watchlist-back" type="button">
+            Back
+          </button>
+          <h2 id="watchlist-title">Watch List</h2>
+        </header>
+
+        <section class="watchlist-stage" aria-labelledby="watchlist-title">
+          <p class="library-status" id="watchlist-status" role="status"></p>
+          <div class="watchlist-grid" id="watchlist-grid"></div>
+        </section>
+      </div>
+    </main>
+
+    <div class="taste-profile-modal" id="taste-profile-modal" hidden>
+      <section
+        class="library-popover taste-profile-popover"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="taste-profile-title"
+      >
+        <div class="library-topline">
+          <h2 id="taste-profile-title">Taste Profile</h2>
+          <button
+            class="library-close"
+            id="taste-profile-close"
+            type="button"
+            aria-label="Close taste profile"
+          >x</button>
+        </div>
+
+        <p class="library-status" id="taste-profile-status" role="status"></p>
+        <div class="taste-profile-columns">
+          <section class="taste-profile-list" aria-labelledby="taste-profile-likes-title">
+            <h3 id="taste-profile-likes-title">Likes</h3>
+            <ul id="taste-profile-likes"></ul>
+          </section>
+          <section class="taste-profile-list" aria-labelledby="taste-profile-dislikes-title">
+            <h3 id="taste-profile-dislikes-title">Dislikes</h3>
+            <ul id="taste-profile-dislikes"></ul>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <div class="movie-feedback-modal" id="movie-feedback-modal" hidden>
+      <section
+        class="movie-feedback-popover"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="movie-feedback-title"
+      >
+        <div class="library-topline">
+          <h2 id="movie-feedback-title">Movie feedback</h2>
+          <button
+            class="library-close"
+            id="movie-feedback-close"
+            type="button"
+            aria-label="Close movie feedback"
+          >x</button>
+        </div>
+
+        <div class="movie-feedback-body" id="movie-feedback-body"></div>
+        <div class="movie-feedback-actions">
+          <button class="feedback-action-button" id="movie-liked-button" type="button">
+            Liked
+          </button>
+          <button class="feedback-action-button" id="movie-disliked-button" type="button">
+            Didn't Like
+          </button>
+        </div>
+        <p class="library-status" id="movie-feedback-status" role="status"></p>
       </section>
     </div>
 

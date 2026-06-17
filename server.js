@@ -2088,6 +2088,14 @@ function getRandomPages(pageCount, count, excludePages = []) {
   return [...pages];
 }
 
+function clampNumber(value, min, max) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.min(Math.max(value, min), max);
+}
+
 function serveStatic(pathname, res) {
   const requestedPath = pathname === "/" ? "/index.html" : pathname;
   const decodedPath = decodeURIComponent(requestedPath);
