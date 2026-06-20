@@ -84,6 +84,57 @@
           </form>
         </section>
 
+        <!-- The taste tuner saves direct liked or disliked movie signals to the signed-in profile. -->
+        <section class="taste-tuner-section" aria-labelledby="taste-tuner-title">
+          <h2 id="taste-tuner-title">Tune your Taste profile</h2>
+          <p class="taste-tuner-intro">
+            Search for a movie, pick it, then tell us if it hit or missed.
+          </p>
+
+          <div class="taste-tuner-search">
+            <label class="sr-only" for="taste-movie-search-input">Movie title</label>
+            <div class="search-box">
+              <input
+                id="taste-movie-search-input"
+                type="search"
+                autocomplete="off"
+                placeholder="Search for a movie..."
+                aria-autocomplete="list"
+                aria-controls="taste-movie-results"
+                aria-expanded="false"
+              >
+              <ul
+                class="movie-results taste-movie-results"
+                id="taste-movie-results"
+                role="listbox"
+                hidden
+              ></ul>
+            </div>
+          </div>
+
+          <article class="taste-tuner-selection" id="taste-tuner-selection" hidden>
+            <div class="taste-tuner-poster" id="taste-tuner-poster"></div>
+            <div class="taste-tuner-copy">
+              <h3 id="taste-tuner-movie-title"></h3>
+              <p id="taste-tuner-movie-overview"></p>
+            </div>
+            <div class="taste-tuner-actions" aria-label="Movie reaction">
+              <button
+                class="feedback-action-button taste-feedback-button"
+                id="taste-liked-button"
+                type="button"
+              >Liked</button>
+              <button
+                class="feedback-action-button taste-feedback-button"
+                id="taste-disliked-button"
+                type="button"
+              >Disliked</button>
+            </div>
+          </article>
+
+          <p class="taste-tuner-status" id="taste-tuner-status" role="status"></p>
+        </section>
+
         <!-- The chat panel sends natural-language recommendation requests to the server. -->
         <section class="chat-panel" aria-labelledby="chat-title">
           <header class="chat-header">

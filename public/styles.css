@@ -385,6 +385,7 @@ h2 {
 
 .mood-section,
 .genre-section,
+.taste-tuner-section,
 .chat-panel {
   position: relative;
   width: 100%;
@@ -401,10 +402,16 @@ h2 {
   padding: 0;
 }
 
-.genre-section {
+.genre-section,
+.taste-tuner-section {
   width: min(690px, 100%);
   padding: clamp(14px, 2.4vw, 22px) 0 0;
   border-top: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+/* Keep autocomplete options above the later chat section while the list overlaps it. */
+.taste-tuner-section {
+  z-index: 3;
 }
 
 .chat-panel {
@@ -661,6 +668,7 @@ h2 {
 }
 
 .genre-section h2,
+.taste-tuner-section h2,
 .chat-header h2 {
   margin-bottom: 14px;
 }
@@ -672,6 +680,99 @@ h2 {
   gap: 10px;
   width: min(560px, 100%);
   margin: 0 auto;
+}
+
+/* The inline taste tuner turns a title search into durable liked or disliked profile feedback. */
+.taste-tuner-intro {
+  margin: -4px auto 14px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.taste-tuner-search {
+  position: relative;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  text-align: left;
+}
+
+.taste-tuner-selection {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: min(560px, 100%);
+  margin: 14px auto 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+  text-align: left;
+}
+
+.taste-tuner-selection[hidden] {
+  display: none;
+}
+
+.taste-tuner-poster {
+  display: grid;
+  width: 74px;
+  aspect-ratio: 2 / 3;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--muted);
+  background: #111;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.taste-tuner-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.taste-tuner-copy {
+  min-width: 0;
+}
+
+.taste-tuner-copy h3 {
+  margin: 0 0 7px;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.taste-tuner-copy p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.taste-tuner-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.taste-tuner-actions .taste-feedback-button {
+  min-width: 112px;
+  min-height: 48px;
+  padding-right: 16px;
+  padding-left: 16px;
+}
+
+.taste-tuner-status {
+  min-height: 1.2rem;
+  margin: 8px auto 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 /* Text inputs reuse the same film-strip surface as the buttons for visual consistency. */
@@ -1709,7 +1810,7 @@ textarea:focus {
   list-style: none;
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 0;
-  background: rgba(0, 0, 0, 0.94);
+  background: #050505;
   box-shadow: 0 20px 46px rgba(0, 0, 0, 0.52);
 }
 
@@ -1862,6 +1963,20 @@ textarea:focus {
   .genre-actor-form button,
   .composer button {
     width: 100%;
+  }
+
+  .taste-tuner-selection {
+    grid-template-columns: 74px minmax(0, 1fr);
+  }
+
+  .taste-tuner-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .taste-tuner-actions .taste-feedback-button {
+    width: 100%;
+    min-width: 0;
   }
 
   .movie-search-modal,
@@ -2087,5 +2202,14 @@ textarea:focus {
 
   .movie-feedback-summary {
     grid-template-columns: 92px minmax(0, 1fr);
+  }
+
+  .taste-tuner-selection {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .taste-tuner-poster {
+    width: 64px;
   }
 }

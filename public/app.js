@@ -16,6 +16,15 @@ const pickSearchButton = document.querySelector("#pick-search-button");
 const pickResultsButton = document.querySelector("#pick-results-button");
 const genreActorForm = document.querySelector("#genre-actor-form");
 const genreActorInput = document.querySelector("#genre-actor-input");
+const tasteMovieSearchInput = document.querySelector("#taste-movie-search-input");
+const tasteMovieResults = document.querySelector("#taste-movie-results");
+const tasteTunerSelection = document.querySelector("#taste-tuner-selection");
+const tasteTunerPoster = document.querySelector("#taste-tuner-poster");
+const tasteTunerMovieTitle = document.querySelector("#taste-tuner-movie-title");
+const tasteTunerMovieOverview = document.querySelector("#taste-tuner-movie-overview");
+const tasteLikedButton = document.querySelector("#taste-liked-button");
+const tasteDislikedButton = document.querySelector("#taste-disliked-button");
+const tasteTunerStatus = document.querySelector("#taste-tuner-status");
 const relatedResultsModal = document.querySelector("#related-results-modal");
 const relatedResultsClose = document.querySelector("#related-results-close");
 const relatedResultsTitle = document.querySelector("#related-results-title");
@@ -126,6 +135,11 @@ let searchResults = [];
 let highlightedResult = -1;
 let searchTimer = null;
 let searchController = null;
+let tasteSearchResults = [];
+let tasteHighlightedResult = -1;
+let tasteSearchTimer = null;
+let tasteSearchController = null;
+let selectedTasteMovie = null;
 let isChatLoading = false;
 let isRelatedLoading = false;
 let relatedResultsReturnFocus = genreActorInput;
@@ -243,6 +257,59 @@ movieSearchInput.addEventListener("keydown", (event) => {
   }
 });
 
+// The inline taste tuner uses its own debounced title search so it can stay independent of poster picks.
+tasteMovieSearchInput.addEventListener("input", () => {
+  const query = tasteMovieSearchInput.value.trim();
+
+  window.clearTimeout(tasteSearchTimer);
+  if (tasteSearchController) {
+    tasteSearchController.abort();
+    tasteSearchController = null;
+  }
+  tasteTunerStatus.textContent = "";
+
+  if (query.length < 2) {
+    closeTasteMovieResults();
+    return;
+  }
+
+  tasteSearchTimer = window.setTimeout(() => {
+    searchTasteMovies(query);
+  }, 220);
+});
+
+// Arrow keys and Enter make the inline movie result list usable without a pointer.
+tasteMovieSearchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeTasteMovieResults();
+    return;
+  }
+
+  if (tasteMovieResults.hidden || !tasteSearchResults.length) {
+    return;
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    tasteHighlightedResult =
+      (tasteHighlightedResult + 1) % tasteSearchResults.length;
+    renderTasteMovieResults();
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    tasteHighlightedResult =
+      (tasteHighlightedResult - 1 + tasteSearchResults.length) %
+      tasteSearchResults.length;
+    renderTasteMovieResults();
+  }
+
+  if (event.key === "Enter" && tasteHighlightedResult >= 0) {
+    event.preventDefault();
+    selectTasteMovie(tasteSearchResults[tasteHighlightedResult]);
+  }
+});
+
 // Close and action buttons are wired to their matching modal, account, watchlist, and feedback flows.
 movieSearchClose.addEventListener("click", closeMoviePicker);
 relatedResultsClose.addEventListener("click", closeRelatedResults);
@@ -254,6 +321,8 @@ tasteProfileClose.addEventListener("click", closeTasteProfile);
 movieFeedbackClose.addEventListener("click", closeMovieFeedbackModal);
 movieLikedButton.addEventListener("click", () => handleWatchlistFeedback("liked"));
 movieDislikedButton.addEventListener("click", () => handleWatchlistFeedback("disliked"));
+tasteLikedButton.addEventListener("click", () => handleTasteFeedback("liked"));
+tasteDislikedButton.addEventListener("click", () => handleTasteFeedback("disliked"));
 accountMenuTaste.addEventListener("click", () => {
   closeAccountMenu();
   openTasteProfile(accountButton);
@@ -353,6 +422,10 @@ document.addEventListener("click", (event) => {
 
   if (!accountMenu.hidden && !event.target.closest(".account-corner")) {
     closeAccountMenu();
+  }
+
+  if (!event.target.closest(".taste-tuner-search")) {
+    closeTasteMovieResults();
   }
 });
 
@@ -555,6 +628,151 @@ async function searchMovies(query) {
     closeResults();
     setMovieStatus(error.message);
   }
+}
+
+// Searches TMDB for the inline taste tuner and ignores stale responses as the query changes.
+async function searchTasteMovies(query) {
+  if (tasteSearchController) {
+    tasteSearchController.abort();
+  }
+
+  tasteSearchController = new AbortController();
+  tasteTunerStatus.textContent = "Searching...";
+
+  try {
+    const response = await fetch(
+      `/api/movies/search?query=${encodeURIComponent(query)}`,
+      { signal: tasteSearchController.signal }
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "TMDB search failed.");
+    }
+
+    tasteSearchResults = data.results || [];
+    tasteHighlightedResult = tasteSearchResults.length ? 0 : -1;
+    tasteTunerStatus.textContent = tasteSearchResults.length
+      ? "Pick a movie from the results."
+      : "No matches found.";
+    renderTasteMovieResults();
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return;
+    }
+
+    tasteSearchResults = [];
+    tasteHighlightedResult = -1;
+    closeTasteMovieResults();
+    tasteTunerStatus.textContent = error.message;
+  }
+}
+
+// Renders movie matches below the taste-tuner input using the shared search-result visual style.
+function renderTasteMovieResults() {
+  tasteMovieResults.replaceChildren();
+
+  if (!tasteSearchResults.length) {
+    closeTasteMovieResults();
+    return;
+  }
+
+  tasteSearchResults.forEach((movie, index) => {
+    const item = document.createElement("li");
+    item.setAttribute("role", "option");
+    item.id = `taste-movie-result-${movie.id}`;
+    item.setAttribute("aria-selected", String(index === tasteHighlightedResult));
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "movie-result";
+    button.addEventListener("click", () => selectTasteMovie(movie));
+
+    const poster = document.createElement("div");
+    poster.className = "result-poster";
+
+    if (movie.posterUrl) {
+      const image = document.createElement("img");
+      image.src = movie.posterUrl;
+      image.alt = "";
+      image.loading = "lazy";
+      poster.append(image);
+    } else {
+      poster.textContent = "No art";
+    }
+
+    const details = document.createElement("span");
+    details.className = "result-copy";
+
+    const title = document.createElement("strong");
+    title.textContent = formatMovieTitle(movie);
+
+    const overview = document.createElement("span");
+    overview.textContent = movie.overview || "Movie result from TMDB";
+
+    details.append(title, overview);
+    button.append(poster, details);
+    item.append(button);
+    tasteMovieResults.append(item);
+  });
+
+  tasteMovieResults.hidden = false;
+  tasteMovieSearchInput.setAttribute("aria-expanded", "true");
+  tasteMovieSearchInput.setAttribute(
+    "aria-activedescendant",
+    tasteHighlightedResult >= 0
+      ? `taste-movie-result-${tasteSearchResults[tasteHighlightedResult].id}`
+      : ""
+  );
+}
+
+// Moves a search result into the reaction card where it can be marked liked or disliked.
+function selectTasteMovie(movie) {
+  selectedTasteMovie = movie;
+  tasteMovieSearchInput.value = "";
+  tasteTunerStatus.textContent = "Choose Liked or Disliked to update your profile.";
+  closeTasteMovieResults();
+  renderTasteMovieSelection();
+}
+
+// Shows the selected movie's art and summary without injecting remote copy as HTML.
+function renderTasteMovieSelection() {
+  tasteTunerPoster.replaceChildren();
+
+  if (!selectedTasteMovie) {
+    tasteTunerSelection.hidden = true;
+    return;
+  }
+
+  if (selectedTasteMovie.posterUrl) {
+    const image = document.createElement("img");
+    image.src = selectedTasteMovie.posterUrl;
+    image.alt = `${selectedTasteMovie.title} poster`;
+    image.loading = "lazy";
+    tasteTunerPoster.append(image);
+  } else {
+    tasteTunerPoster.textContent = "No art";
+  }
+
+  tasteTunerMovieTitle.textContent = formatMovieTitle(selectedTasteMovie);
+  tasteTunerMovieOverview.textContent =
+    selectedTasteMovie.overview || "Movie result from TMDB";
+  tasteTunerSelection.hidden = false;
+}
+
+// Clears the inline result list and its active-descendant accessibility state.
+function closeTasteMovieResults() {
+  if (tasteSearchController) {
+    tasteSearchController.abort();
+    tasteSearchController = null;
+  }
+
+  tasteSearchResults = [];
+  tasteHighlightedResult = -1;
+  tasteMovieResults.hidden = true;
+  tasteMovieResults.replaceChildren();
+  tasteMovieSearchInput.setAttribute("aria-expanded", "false");
+  tasteMovieSearchInput.removeAttribute("aria-activedescendant");
 }
 
 // Renders the movie-picker listbox and keeps its active-descendant accessibility state in sync.
@@ -1943,6 +2161,42 @@ async function saveMovieFeedback(movie, status, source) {
   return data.feedback;
 }
 
+// Saves a direct liked or disliked signal from the inline tuner to the user's taste profile.
+async function handleTasteFeedback(status) {
+  if (isFeedbackLoading || !selectedTasteMovie) {
+    return;
+  }
+
+  const actionButton = status === "liked" ? tasteLikedButton : tasteDislikedButton;
+  const canSave = await requireSignedIn({
+    message: "Log in to add this movie to your taste profile.",
+    returnFocusElement: actionButton,
+    statusElement: tasteTunerStatus
+  });
+
+  if (!canSave) {
+    return;
+  }
+
+  const movieTitle = formatMovieTitle(selectedTasteMovie);
+  setFeedbackLoading(true);
+  tasteTunerStatus.textContent = `Saving ${movieTitle}...`;
+
+  try {
+    await saveMovieFeedback(selectedTasteMovie, status, "taste_tuner");
+    tasteTunerStatus.textContent = `${movieTitle} was added to your ${
+      status === "liked" ? "Likes" : "Dislikes"
+    }.`;
+    selectedTasteMovie = null;
+    tasteMovieSearchInput.value = "";
+    renderTasteMovieSelection();
+  } catch (error) {
+    tasteTunerStatus.textContent = error.message;
+  } finally {
+    setFeedbackLoading(false);
+  }
+}
+
 // Deletes one saved movie feedback record by the strongest identifier available.
 async function deleteMovieFeedback(movie) {
   const params = new URLSearchParams();
@@ -2030,6 +2284,8 @@ function setFeedbackLoading(isLoading) {
   renderWantWatchButton();
   movieLikedButton.disabled = isLoading;
   movieDislikedButton.disabled = isLoading;
+  tasteLikedButton.disabled = isLoading;
+  tasteDislikedButton.disabled = isLoading;
   Array.from(watchlistGrid.querySelectorAll(".watchlist-remove-button")).forEach(
     (button) => {
       button.disabled = isLoading;
