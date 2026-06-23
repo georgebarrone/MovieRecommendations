@@ -22,6 +22,7 @@ const TMDB_API_KEY = cleanSecret(process.env.TMDB_API_KEY);
 const TMDB_ACCESS_TOKEN = cleanSecret(
   process.env.TMDB_ACCESS_TOKEN || process.env.TMDB_READ_ACCESS_TOKEN
 );
+const YOUTUBE_API_KEY = cleanSecret(process.env.YOUTUBE_API_KEY);
 const TURSO_DATABASE_URL = cleanSecret(process.env.TURSO_DATABASE_URL);
 const TURSO_AUTH_TOKEN = cleanSecret(process.env.TURSO_AUTH_TOKEN);
 const SESSION_SECRET = cleanSecret(process.env.SESSION_SECRET);
@@ -74,6 +75,30 @@ const FALLBACK_POSTER_WALL = [
   }
 ];
 
+// Editorial picks guarantee strong media for known titles and can be expanded without changing the UI.
+const CURATED_MOVIE_MEDIA = new Map([
+  [
+    "1847",
+    {
+      trailer: {
+        id: "fAYheZweypk",
+        title: "The Long Goodbye Official Trailer #1",
+        url: "https://www.youtube.com/watch?v=fAYheZweypk",
+        embedUrl: "https://www.youtube-nocookie.com/embed/fAYheZweypk",
+        thumbnailUrl: "https://i.ytimg.com/vi/fAYheZweypk/hqdefault.jpg"
+      },
+      essay: {
+        id: "v8DjRnCP9iE",
+        title: "Why the Poster Matters | The Long Goodbye Video Essay",
+        channelTitle: "FilmsInFocus",
+        url: "https://www.youtube.com/watch?v=v8DjRnCP9iE",
+        embedUrl: "https://www.youtube-nocookie.com/embed/v8DjRnCP9iE",
+        thumbnailUrl: "https://i.ytimg.com/vi/v8DjRnCP9iE/hqdefault.jpg"
+      }
+    }
+  ]
+]);
+
 // Shared constants centralize image sizing, session lifetime, password hashing, and feedback vocabulary.
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 const POSTER_WALL_PAGE_SAMPLE_COUNT = 12;
@@ -82,6 +107,7 @@ const SESSION_COOKIE_NAME = "movie_match_session";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_KEY_LENGTH = 64;
 const TASTE_PROMPT_LIMIT = 12;
+const MOVIE_MEDIA_CACHE_DURATION_MS = 1000 * 60 * 60 * 6;
 const FEEDBACK_STATUS_VALUES = new Set([
   "liked",
   "disliked",
@@ -92,6 +118,7 @@ const FEEDBACK_STATUS_VALUES = new Set([
 // Database client state is cached so Turso setup happens once per server process.
 let dbClient = null;
 let databaseReadyPromise = null;
+const movieMediaCache = new Map();
 
 // TMDB genre ids are kept locally so casual genre searches can become discover requests.
 const TMDB_MOVIE_GENRES = [
@@ -237,6 +264,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/movies/providers") {
       await handleMovieProviders(url, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/movies/media") {
+      await handleMovieMedia(url, res);
       return;
     }
 
@@ -617,6 +649,186 @@ async function handleMovieProviders(url, res) {
     console.error(error);
     sendJson(res, 502, { error: "TMDB provider lookup failed." });
   }
+}
+
+// Finds an official TMDB trailer and, when configured, a YouTube video essay for a movie detail view.
+async function handleMovieMedia(url, res) {
+  const movieId = String(url.searchParams.get("movieId") || "").trim();
+  const title = String(url.searchParams.get("title") || "").trim().slice(0, 120);
+  const yearMatch = String(url.searchParams.get("year") || "").match(/\d{4}/);
+  const year = yearMatch ? yearMatch[0] : "";
+
+  if (!movieId && !title) {
+    sendJson(res, 400, { error: "Send a movie id or title for media lookup." });
+    return;
+  }
+
+  const cacheKey = `${movieId}:${normalizeSearchTerm(title)}:${year}`;
+  const cached = movieMediaCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.savedAt < MOVIE_MEDIA_CACHE_DURATION_MS) {
+    sendJson(res, 200, cached.data);
+    return;
+  }
+
+  const essaySearchUrl = createYouTubeEssaySearchUrl(title, year);
+  const curatedMedia = CURATED_MOVIE_MEDIA.get(movieId);
+  const [trailerResult, essayResult] = await Promise.allSettled([
+    curatedMedia?.trailer
+      ? Promise.resolve(curatedMedia.trailer)
+      : movieId && (TMDB_API_KEY || TMDB_ACCESS_TOKEN)
+      ? findTmdbTrailer(movieId)
+      : Promise.resolve(null),
+    curatedMedia?.essay
+      ? Promise.resolve(curatedMedia.essay)
+      : title && YOUTUBE_API_KEY
+      ? findYouTubeVideoEssay(title, year)
+      : Promise.resolve(null)
+  ]);
+
+  if (trailerResult.status === "rejected") {
+    console.error("TMDB trailer lookup failed:", trailerResult.reason);
+  }
+
+  if (essayResult.status === "rejected") {
+    console.error("YouTube essay lookup failed:", essayResult.reason);
+  }
+
+  const data = {
+    trailer: trailerResult.status === "fulfilled" ? trailerResult.value : null,
+    essay: essayResult.status === "fulfilled" ? essayResult.value : null,
+    essaySearchUrl,
+    essayLookupEnabled: Boolean(YOUTUBE_API_KEY || curatedMedia?.essay)
+  };
+
+  movieMediaCache.set(cacheKey, { savedAt: Date.now(), data });
+  if (movieMediaCache.size > 250) {
+    movieMediaCache.delete(movieMediaCache.keys().next().value);
+  }
+
+  sendJson(res, 200, data);
+}
+
+// Chooses the best English-language YouTube trailer or teaser returned by TMDB.
+async function findTmdbTrailer(movieId) {
+  const tmdbUrl = new URL(
+    `https://api.themoviedb.org/3/movie/${encodeURIComponent(movieId)}/videos`
+  );
+  const data = await fetchTmdbJson(tmdbUrl);
+  const videos = (Array.isArray(data.results) ? data.results : [])
+    .filter(
+      (video) =>
+        video.site === "YouTube" &&
+        ["Trailer", "Teaser"].includes(video.type) &&
+        /^[a-zA-Z0-9_-]{6,20}$/.test(String(video.key || ""))
+    )
+    .sort((first, second) => scoreTmdbTrailer(second) - scoreTmdbTrailer(first));
+
+  const trailer = videos[0];
+  if (!trailer) {
+    return null;
+  }
+
+  return {
+    id: trailer.key,
+    title: trailer.name || "Official trailer",
+    url: `https://www.youtube.com/watch?v=${trailer.key}`,
+    embedUrl: `https://www.youtube-nocookie.com/embed/${trailer.key}`,
+    thumbnailUrl: `https://i.ytimg.com/vi/${trailer.key}/hqdefault.jpg`
+  };
+}
+
+function scoreTmdbTrailer(video) {
+  let score = video.type === "Trailer" ? 100 : 40;
+  score += video.official ? 30 : 0;
+  score += video.iso_639_1 === "en" ? 15 : 0;
+  score += /official/i.test(video.name || "") ? 8 : 0;
+  return score;
+}
+
+// Uses YouTube's supported search API to select a relevant essay-style result.
+async function findYouTubeVideoEssay(title, year) {
+  const youtubeUrl = new URL("https://www.googleapis.com/youtube/v3/search");
+  youtubeUrl.searchParams.set("part", "snippet");
+  youtubeUrl.searchParams.set("type", "video");
+  youtubeUrl.searchParams.set("maxResults", "8");
+  youtubeUrl.searchParams.set("videoEmbeddable", "true");
+  youtubeUrl.searchParams.set("safeSearch", "moderate");
+  youtubeUrl.searchParams.set("relevanceLanguage", "en");
+  youtubeUrl.searchParams.set(
+    "q",
+    `\"${title}\" ${year} film video essay analysis -trailer -clip -reaction`.trim()
+  );
+  youtubeUrl.searchParams.set("key", YOUTUBE_API_KEY);
+
+  const response = await fetch(youtubeUrl);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message ||
+        `YouTube returned ${response.status} ${response.statusText}`
+    );
+  }
+
+  const results = (Array.isArray(data.items) ? data.items : [])
+    .filter((item) => /^[a-zA-Z0-9_-]{6,20}$/.test(String(item.id?.videoId || "")))
+    .filter(
+      (item) =>
+        !/trailer|clip|scene|reaction|ending explained/i.test(
+          item.snippet?.title || ""
+        )
+    )
+    .sort(
+      (first, second) =>
+        scoreYouTubeEssay(second, title) - scoreYouTubeEssay(first, title)
+    );
+
+  const essay = results[0];
+  if (!essay) {
+    return null;
+  }
+
+  const videoId = essay.id.videoId;
+  return {
+    id: videoId,
+    title: decodeHtmlEntities(essay.snippet?.title || `${title} video essay`),
+    channelTitle: decodeHtmlEntities(essay.snippet?.channelTitle || "YouTube"),
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+    embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}`,
+    thumbnailUrl:
+      essay.snippet?.thumbnails?.high?.url ||
+      essay.snippet?.thumbnails?.medium?.url ||
+      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  };
+}
+
+function scoreYouTubeEssay(item, movieTitle) {
+  const resultTitle = String(item.snippet?.title || "");
+  let score = 0;
+  score += /video essay/i.test(resultTitle) ? 40 : 0;
+  score += /analysis|cinema|film|meaning|masterpiece|exploring/i.test(resultTitle)
+    ? 20
+    : 0;
+  score += normalizeSearchTerm(resultTitle).includes(normalizeSearchTerm(movieTitle))
+    ? 30
+    : 0;
+  return score;
+}
+
+function createYouTubeEssaySearchUrl(title, year) {
+  const query = [title, year, "film video essay analysis"].filter(Boolean).join(" ");
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+}
+
+// YouTube snippet text encodes a small set of HTML entities even though it is rendered as plain text.
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 // Reports whether account auth is configured and which user, if any, owns the current session.

@@ -1407,34 +1407,56 @@ function renderRelatedResults(data) {
   });
 }
 
-// Opens the detailed view for one recommendation and fetches provider data when possible.
+// Opens one recommendation and fetches its providers, trailer, and essay metadata in parallel.
 async function showRelatedMovieDetail(movie, isPickMatch) {
   selectedRelatedMovie = movie;
   selectedRelatedMovieIsPickMatch = isPickMatch;
+  const requests = [];
 
   if (
-    selectedRelatedMovie?.id &&
-    !selectedRelatedMovie.providerInfo &&
-    !selectedRelatedMovie.providerInfoLoading
+    movie?.id &&
+    movie.providerInfo === undefined &&
+    !movie.providerInfoLoading
   ) {
-    selectedRelatedMovie.providerInfoLoading = true;
-    renderRelatedMovieDetail();
+    movie.providerInfoLoading = true;
+    requests.push(
+      fetchMovieProviders(movie.id)
+        .then((data) => {
+          movie.providerInfo = data;
+        })
+        .catch(() => {
+          movie.providerInfo = null;
+        })
+        .finally(() => {
+          movie.providerInfoLoading = false;
+        })
+    );
+  }
 
-    try {
-      selectedRelatedMovie.providerInfo = await fetchMovieProviders(
-        selectedRelatedMovie.id
-      );
-    } catch {
-      selectedRelatedMovie.providerInfo = null;
-    } finally {
-      selectedRelatedMovie.providerInfoLoading = false;
-      renderRelatedMovieDetail();
-    }
-
-    return;
+  if (movie && movie.mediaInfo === undefined && !movie.mediaInfoLoading) {
+    movie.mediaInfoLoading = true;
+    requests.push(
+      fetchMovieMedia(movie)
+        .then((data) => {
+          movie.mediaInfo = data;
+        })
+        .catch(() => {
+          movie.mediaInfo = null;
+        })
+        .finally(() => {
+          movie.mediaInfoLoading = false;
+        })
+    );
   }
 
   renderRelatedMovieDetail();
+
+  if (requests.length) {
+    await Promise.allSettled(requests);
+    if (selectedRelatedMovie === movie && !relatedResultsModal.hidden) {
+      renderRelatedMovieDetail();
+    }
+  }
 }
 
 // Renders the selected recommendation's poster, description, fit reason, links, and providers.
@@ -1461,6 +1483,9 @@ function renderRelatedMovieDetail() {
     return;
   }
 
+  relatedResultsTitle.textContent = selectedRelatedMovie.year
+    ? `${selectedRelatedMovie.title} (${selectedRelatedMovie.year})`
+    : selectedRelatedMovie.title;
   renderWantWatchButton();
 
   const detail = document.createElement("article");
@@ -1482,7 +1507,28 @@ function renderRelatedMovieDetail() {
     image.src = selectedRelatedMovie.posterUrl;
     image.alt = `${selectedRelatedMovie.title} poster`;
     image.loading = "lazy";
-    poster.append(image);
+
+    const trailer = selectedRelatedMovie.mediaInfo?.trailer;
+    if (trailer?.url) {
+      const trailerLink = document.createElement("a");
+      trailerLink.href = trailer.url;
+      trailerLink.target = "_blank";
+      trailerLink.rel = "noopener noreferrer";
+      trailerLink.className = "related-movie-trailer-link";
+      trailerLink.setAttribute(
+        "aria-label",
+        `Play the trailer for ${selectedRelatedMovie.title} on YouTube`
+      );
+
+      const playLabel = document.createElement("span");
+      playLabel.className = "related-movie-trailer-label";
+      playLabel.setAttribute("aria-hidden", "true");
+      playLabel.textContent = "▶  Play trailer";
+      trailerLink.append(image, playLabel);
+      poster.append(trailerLink);
+    } else {
+      poster.append(image);
+    }
   } else {
     poster.textContent = "No art";
   }
@@ -1503,6 +1549,15 @@ function renderRelatedMovieDetail() {
       "/assets/letterboxd-logo.png"
     )
   );
+  posterBlock.append(posterActions);
+
+  const providerSection = createProviderSection(selectedRelatedMovie);
+  if (providerSection) {
+    posterBlock.append(providerSection);
+  }
+
+  const contentColumn = document.createElement("div");
+  contentColumn.className = "related-movie-content";
 
   const descriptionCopy = document.createElement("div");
   descriptionCopy.className = "related-movie-description";
@@ -1532,38 +1587,55 @@ function renderRelatedMovieDetail() {
   }
 
   descriptionCopy.append(description);
+  contentColumn.append(descriptionCopy);
 
-  detail.append(posterBlock, descriptionCopy);
+  const fitCopy = document.createElement("div");
+  fitCopy.className = "related-movie-fit";
 
-  const hasFitReason = Boolean(selectedRelatedMovie.fitReason);
+  const reasonLabel = document.createElement("span");
+  reasonLabel.className = "movie-fit-label";
+  reasonLabel.textContent = "Why it fits:";
 
-  if (!hasFitReason) {
-    detail.classList.add("no-fit-reason");
+  const reason = document.createElement("p");
+  reason.textContent = getRelatedMovieFitReason(selectedRelatedMovie);
+
+  fitCopy.append(reasonLabel, reason);
+  contentColumn.append(fitCopy);
+
+  const essaySection = createVideoEssaySection(selectedRelatedMovie);
+  if (essaySection) {
+    contentColumn.append(essaySection);
   }
 
-  if (hasFitReason) {
-    const fitCopy = document.createElement("div");
-    fitCopy.className = "related-movie-fit";
-
-    const reasonLabel = document.createElement("span");
-    reasonLabel.className = "movie-fit-label";
-    reasonLabel.textContent = "Why it fits:";
-
-    const reason = document.createElement("p");
-    reason.textContent = selectedRelatedMovie.fitReason;
-
-    fitCopy.append(reasonLabel, reason);
-    detail.append(fitCopy);
-  }
-
-  detail.append(posterActions);
-
-  const providerSection = createProviderSection(selectedRelatedMovie);
-  if (providerSection) {
-    detail.append(providerSection);
-  }
+  detail.append(posterBlock, contentColumn);
 
   relatedResultsGrid.append(detail);
+}
+
+// Supplies a useful fit explanation for both AI recommendations and genre/actor matches.
+function getRelatedMovieFitReason(movie) {
+  const explicitReason = String(movie?.fitReason || "").trim();
+  if (explicitReason) {
+    return explicitReason;
+  }
+
+  const matchType = lastRelatedResultsData?.matchType;
+  const matchName =
+    lastRelatedResultsData?.matchName || lastRelatedResultsData?.query || "your search";
+
+  if (matchType === "actor") {
+    return `It features ${matchName}, connecting directly to the actor you searched for.`;
+  }
+
+  if (matchType === "genre") {
+    return `Its genre and tone line up with your search for ${matchName}.`;
+  }
+
+  if (matchType === "picks") {
+    return "Its tone, themes, or style connect with the movies you selected.";
+  }
+
+  return "It closely matches the kind of movie you asked to explore.";
 }
 
 // Chooses the short description text shown on recommendation cards.
@@ -1616,6 +1688,85 @@ async function fetchMovieProviders(movieId) {
   }
 
   return data;
+}
+
+// Fetches the selected movie's trailer and optional video-essay recommendation.
+async function fetchMovieMedia(movie) {
+  const params = new URLSearchParams({
+    movieId: movie.id || "",
+    title: movie.title || "",
+    year: movie.year || ""
+  });
+  const response = await fetch(`/api/movies/media?${params}`);
+  const data = await readJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(data.error || "Movie media lookup failed.");
+  }
+
+  return data;
+}
+
+// Renders an embedded essay when available, with a focused YouTube search as fallback.
+function createVideoEssaySection(movie) {
+  if (!movie) {
+    return null;
+  }
+
+  const section = document.createElement("section");
+  section.className = "related-movie-essay";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Video Essay Suggestion";
+  section.append(heading);
+
+  if (movie.mediaInfoLoading) {
+    const loading = document.createElement("p");
+    loading.textContent = "Looking for a thoughtful video essay...";
+    section.append(loading);
+    return section;
+  }
+
+  const mediaInfo = movie.mediaInfo;
+  const essay = mediaInfo?.essay;
+
+  if (essay?.embedUrl) {
+    const frame = document.createElement("iframe");
+    frame.src = essay.embedUrl;
+    frame.title = essay.title || `${movie.title} video essay`;
+    frame.loading = "lazy";
+    frame.allow =
+      "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    frame.referrerPolicy = "strict-origin-when-cross-origin";
+    frame.allowFullscreen = true;
+
+    const essayTitle = document.createElement("a");
+    essayTitle.href = essay.url;
+    essayTitle.target = "_blank";
+    essayTitle.rel = "noopener noreferrer";
+    essayTitle.className = "related-movie-essay-title";
+    essayTitle.textContent = essay.title;
+
+    const byline = document.createElement("p");
+    byline.className = "related-movie-essay-byline";
+    byline.textContent = `Video essay by ${essay.channelTitle || "YouTube"}`;
+    section.append(frame, essayTitle, byline);
+    return section;
+  }
+
+  const fallbackCopy = document.createElement("p");
+  fallbackCopy.textContent = mediaInfo?.essayLookupEnabled
+    ? "I couldn't find a strong essay match automatically."
+    : "Automatic essay picks need a YouTube Data API key.";
+  section.append(fallbackCopy);
+
+  const searchUrl =
+    mediaInfo?.essaySearchUrl ||
+    `https://www.youtube.com/results?search_query=${encodeURIComponent(
+      `${movie.title} ${movie.year || ""} film video essay analysis`
+    )}`;
+  section.append(createExternalLinkButton(searchUrl, "Search video essays"));
+  return section;
 }
 
 // Builds the streaming, rental, purchase, and TMDB watch-link section for a detail card.

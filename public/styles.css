@@ -1009,6 +1009,15 @@ textarea:focus {
   width: min(820px, 100%);
 }
 
+.related-results-modal {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.related-results-modal.detail-open {
+  padding-top: min(5vh, 48px);
+}
+
 .account-popover {
   width: min(480px, 100%);
 }
@@ -1549,6 +1558,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  align-self: stretch;
   width: 100%;
 }
 
@@ -1571,6 +1581,50 @@ textarea:focus {
   object-fit: cover;
 }
 
+.related-movie-trailer-link {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: #fff;
+}
+
+.related-movie-trailer-link::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(180deg, transparent 56%, rgba(0, 0, 0, 0.86));
+  transition: background 160ms ease;
+}
+
+.related-movie-trailer-link:hover::after,
+.related-movie-trailer-link:focus-visible::after {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06) 30%, rgba(0, 0, 0, 0.94));
+}
+
+.related-movie-trailer-link:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.9);
+  outline-offset: -3px;
+}
+
+.related-movie-trailer-label {
+  position: absolute;
+  z-index: 1;
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(0, 0, 0, 0.5);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .related-movie-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1579,8 +1633,6 @@ textarea:focus {
   justify-content: flex-start;
   padding: 10px;
   background: rgba(0, 0, 0, 0.08);
-  grid-column: 1;
-  grid-row: 2;
 }
 
 .external-link-button {
@@ -1609,8 +1661,7 @@ textarea:focus {
 }
 
 .related-movie-providers {
-  grid-column: 2 / -1;
-  grid-row: 2;
+  flex: 1;
   margin-top: 0;
   padding: 14px;
   background: rgba(255, 255, 255, 0.04);
@@ -1642,6 +1693,46 @@ textarea:focus {
 .related-movie-provider-link:hover,
 .related-movie-provider-link:focus-visible {
   color: #fff;
+}
+
+.related-movie-essay {
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.related-movie-essay h3 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.related-movie-essay iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  background: #000;
+}
+
+.related-movie-essay p {
+  margin: 0 0 12px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.related-movie-essay-title {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.related-movie-essay-byline {
+  margin-top: 4px !important;
+  margin-bottom: 0 !important;
 }
 
 .related-movie-copy {
@@ -1695,10 +1786,10 @@ textarea:focus {
 
 .related-movie-detail {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(260px, 1fr));
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(360px, 1.15fr);
   gap: 18px;
   align-items: start;
-  grid-auto-rows: minmax(min-content, auto);
   width: 100%;
   min-width: 0;
 }
@@ -1707,8 +1798,11 @@ textarea:focus {
   min-width: 0;
 }
 
-.related-movie-detail.no-fit-reason {
-  grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.3fr);
+.related-movie-content {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  min-width: 0;
 }
 
 .related-movie-detail .related-movie-poster {
@@ -2027,18 +2121,18 @@ textarea:focus {
     overflow-x: hidden;
   }
 
-  .related-movie-detail,
-  .related-movie-detail.no-fit-reason {
+  .related-movie-detail {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 
   .related-movie-detail .related-movie-poster-block {
-    width: min(190px, 54vw);
-    justify-self: center;
+    width: 100%;
   }
 
   .related-movie-detail .related-movie-poster {
+    width: min(190px, 54vw);
+    align-self: center;
     max-height: none;
   }
 
@@ -2049,7 +2143,8 @@ textarea:focus {
   }
 
   .related-movie-actions,
-  .related-movie-providers {
+  .related-movie-providers,
+  .related-movie-essay {
     grid-column: auto;
     grid-row: auto;
   }
@@ -2153,6 +2248,10 @@ textarea:focus {
   }
 
   .related-movie-detail .related-movie-poster-block {
+    width: 100%;
+  }
+
+  .related-movie-detail .related-movie-poster {
     width: min(160px, 50vw);
   }
 
