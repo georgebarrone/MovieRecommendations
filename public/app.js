@@ -1707,9 +1707,14 @@ async function fetchMovieMedia(movie) {
   return data;
 }
 
-// Renders an embedded essay when available, with a focused YouTube search as fallback.
+// Renders an embedded essay only when the lookup finds a strong embeddable match.
 function createVideoEssaySection(movie) {
   if (!movie) {
+    return null;
+  }
+
+  const essay = movie.mediaInfo?.essay;
+  if (!movie.mediaInfoLoading && !essay?.embedUrl) {
     return null;
   }
 
@@ -1717,7 +1722,7 @@ function createVideoEssaySection(movie) {
   section.className = "related-movie-essay";
 
   const heading = document.createElement("h3");
-  heading.textContent = "Video Essay Suggestion";
+  heading.textContent = "Video Suggestion";
   section.append(heading);
 
   if (movie.mediaInfoLoading) {
@@ -1726,9 +1731,6 @@ function createVideoEssaySection(movie) {
     section.append(loading);
     return section;
   }
-
-  const mediaInfo = movie.mediaInfo;
-  const essay = mediaInfo?.essay;
 
   if (essay?.embedUrl) {
     const frame = document.createElement("iframe");
@@ -1754,19 +1756,7 @@ function createVideoEssaySection(movie) {
     return section;
   }
 
-  const fallbackCopy = document.createElement("p");
-  fallbackCopy.textContent = mediaInfo?.essayLookupEnabled
-    ? "I couldn't find a strong essay match automatically."
-    : "Automatic essay picks need a YouTube Data API key.";
-  section.append(fallbackCopy);
-
-  const searchUrl =
-    mediaInfo?.essaySearchUrl ||
-    `https://www.youtube.com/results?search_query=${encodeURIComponent(
-      `${movie.title} ${movie.year || ""} film video essay analysis`
-    )}`;
-  section.append(createExternalLinkButton(searchUrl, "Search video essays"));
-  return section;
+  return null;
 }
 
 // Builds the streaming, rental, purchase, and TMDB watch-link section for a detail card.

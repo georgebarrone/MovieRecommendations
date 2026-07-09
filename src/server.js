@@ -108,6 +108,10 @@ const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_KEY_LENGTH = 64;
 const TASTE_PROMPT_LIMIT = 12;
 const MOVIE_MEDIA_CACHE_DURATION_MS = 1000 * 60 * 60 * 6;
+const YOUTUBE_ESSAY_SEARCH_MAX_RESULTS = 25;
+const YOUTUBE_ESSAY_GOOD_SCORE = 85;
+const YOUTUBE_ESSAY_MIN_SCORE = 60;
+const YOUTUBE_VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{6,20}$/;
 const FEEDBACK_STATUS_VALUES = new Set([
   "liked",
   "disliked",
@@ -748,17 +752,60 @@ function scoreTmdbTrailer(video) {
 
 // Uses YouTube's supported search API to select a relevant essay-style result.
 async function findYouTubeVideoEssay(title, year) {
+  const candidates = new Map();
+
+  for (const query of createYouTubeEssayQueries(title, year)) {
+    const items = await searchYouTubeEssayVideos(query);
+
+    for (const item of items) {
+      const videoId = String(item.id?.videoId || "");
+
+      if (YOUTUBE_VIDEO_ID_PATTERN.test(videoId) && !candidates.has(videoId)) {
+        candidates.set(videoId, item);
+      }
+    }
+
+    const bestEssay = selectBestYouTubeEssay([...candidates.values()], title, year);
+    if (bestEssay && bestEssay.score >= YOUTUBE_ESSAY_GOOD_SCORE) {
+      return formatYouTubeEssay(bestEssay.item, title);
+    }
+  }
+
+  const bestEssay = selectBestYouTubeEssay([...candidates.values()], title, year);
+  if (!bestEssay || bestEssay.score < YOUTUBE_ESSAY_MIN_SCORE) {
+    return null;
+  }
+
+  return formatYouTubeEssay(bestEssay.item, title);
+}
+
+function createYouTubeEssayQueries(title, year) {
+  const cleanTitle = String(title || "").trim().replace(/\s+/g, " ");
+  const baseTitle = getReliableBaseMovieTitle(cleanTitle);
+  const quotedTitle = quoteYouTubeQuery(cleanTitle);
+  const queries = [
+    `${quotedTitle} film video essay analysis`,
+    `${quotedTitle} movie analysis explained`,
+    year ? `${quotedTitle} ${year} film analysis` : "",
+    baseTitle && baseTitle !== cleanTitle
+      ? `${quoteYouTubeQuery(baseTitle)} ${year || ""} film video essay analysis`
+      : "",
+    `${cleanTitle} film video essay analysis`
+  ];
+
+  return [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
+}
+
+async function searchYouTubeEssayVideos(query) {
   const youtubeUrl = new URL("https://www.googleapis.com/youtube/v3/search");
   youtubeUrl.searchParams.set("part", "snippet");
   youtubeUrl.searchParams.set("type", "video");
-  youtubeUrl.searchParams.set("maxResults", "8");
+  youtubeUrl.searchParams.set("maxResults", String(YOUTUBE_ESSAY_SEARCH_MAX_RESULTS));
   youtubeUrl.searchParams.set("videoEmbeddable", "true");
   youtubeUrl.searchParams.set("safeSearch", "moderate");
   youtubeUrl.searchParams.set("relevanceLanguage", "en");
-  youtubeUrl.searchParams.set(
-    "q",
-    `\"${title}\" ${year} film video essay analysis -trailer -clip -reaction`.trim()
-  );
+  youtubeUrl.searchParams.set("order", "relevance");
+  youtubeUrl.searchParams.set("q", query);
   youtubeUrl.searchParams.set("key", YOUTUBE_API_KEY);
 
   const response = await fetch(youtubeUrl);
@@ -771,25 +818,27 @@ async function findYouTubeVideoEssay(title, year) {
     );
   }
 
-  const results = (Array.isArray(data.items) ? data.items : [])
-    .filter((item) => /^[a-zA-Z0-9_-]{6,20}$/.test(String(item.id?.videoId || "")))
-    .filter(
-      (item) =>
-        !/trailer|clip|scene|reaction|ending explained/i.test(
-          item.snippet?.title || ""
-        )
-    )
-    .sort(
-      (first, second) =>
-        scoreYouTubeEssay(second, title) - scoreYouTubeEssay(first, title)
-    );
+  return Array.isArray(data.items) ? data.items : [];
+}
 
-  const essay = results[0];
-  if (!essay) {
+function selectBestYouTubeEssay(items, title, year) {
+  const scoredItems = items
+    .map((item) => ({
+      item,
+      score: scoreYouTubeEssay(item, title, year)
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((first, second) => second.score - first.score);
+
+  return scoredItems[0] || null;
+}
+
+function formatYouTubeEssay(essay, title) {
+  const videoId = String(essay.id?.videoId || "");
+  if (!YOUTUBE_VIDEO_ID_PATTERN.test(videoId)) {
     return null;
   }
 
-  const videoId = essay.id.videoId;
   return {
     id: videoId,
     title: decodeHtmlEntities(essay.snippet?.title || `${title} video essay`),
@@ -803,17 +852,112 @@ async function findYouTubeVideoEssay(title, year) {
   };
 }
 
-function scoreYouTubeEssay(item, movieTitle) {
-  const resultTitle = String(item.snippet?.title || "");
+function scoreYouTubeEssay(item, movieTitle, year) {
+  const resultTitle = decodeHtmlEntities(item.snippet?.title || "");
+  const resultDescription = decodeHtmlEntities(item.snippet?.description || "");
+  const channelTitle = decodeHtmlEntities(item.snippet?.channelTitle || "");
+  const resultText = `${resultTitle} ${resultDescription}`;
+  const titleMatchScore = scoreYouTubeTitleMatch(resultTitle, resultText, movieTitle);
+
+  if (!titleMatchScore || isRejectedYouTubeEssayCandidate(resultTitle)) {
+    return 0;
+  }
+
   let score = 0;
-  score += /video essay/i.test(resultTitle) ? 40 : 0;
-  score += /analysis|cinema|film|meaning|masterpiece|exploring/i.test(resultTitle)
-    ? 20
+  score += titleMatchScore;
+  score += /video essay/i.test(resultTitle) ? 55 : 0;
+  score += /video essay/i.test(resultDescription) ? 20 : 0;
+  score += /\b(analysis|analyzing|essay|cinema|film|meaning|theme|themes|masterpiece|exploring|explained|retrospective|breakdown|deep dive|cinematography|screenplay|symbolism|philosophy|aesthetic|visuals)\b/i.test(
+    resultText
+  )
+    ? 28
     : 0;
-  score += normalizeSearchTerm(resultTitle).includes(normalizeSearchTerm(movieTitle))
-    ? 30
+  score += /\b(why|how)\b/i.test(resultTitle) ? 10 : 0;
+  score += /\b(movie|film|cinema|director|screenplay|cinematography)\b/i.test(resultText)
+    ? 12
+    : 0;
+  score += year && resultText.includes(year) ? 8 : 0;
+  score += isTrustedVideoEssayChannel(channelTitle) ? 12 : 0;
+  score -= /\b(review|recap|ranking|ranked|ending explained)\b/i.test(resultTitle)
+    ? 24
     : 0;
   return score;
+}
+
+function scoreYouTubeTitleMatch(resultTitle, resultText, movieTitle) {
+  const normalizedMovieTitle = normalizeSearchTerm(movieTitle);
+  const normalizedBaseTitle = normalizeSearchTerm(getReliableBaseMovieTitle(movieTitle));
+  const normalizedResultTitle = normalizeSearchTerm(resultTitle);
+  const normalizedResultText = normalizeSearchTerm(resultText);
+  const isShortTitle = normalizedMovieTitle.length <= 3;
+
+  if (containsNormalizedPhrase(normalizedResultTitle, normalizedMovieTitle)) {
+    return isShortTitle ? 15 : 48;
+  }
+
+  if (
+    normalizedBaseTitle &&
+    normalizedBaseTitle !== normalizedMovieTitle &&
+    containsNormalizedPhrase(normalizedResultTitle, normalizedBaseTitle)
+  ) {
+    return normalizedBaseTitle.length <= 3 ? 12 : 34;
+  }
+
+  if (containsNormalizedPhrase(normalizedResultText, normalizedMovieTitle)) {
+    return isShortTitle ? 0 : 26;
+  }
+
+  if (
+    normalizedBaseTitle &&
+    normalizedBaseTitle !== normalizedMovieTitle &&
+    containsNormalizedPhrase(normalizedResultText, normalizedBaseTitle)
+  ) {
+    return normalizedBaseTitle.length <= 3 ? 0 : 18;
+  }
+
+  return 0;
+}
+
+function isRejectedYouTubeEssayCandidate(resultTitle) {
+  const title = String(resultTitle || "");
+  if (/\b(trailer|teaser|reaction|watch ?along|full movie|soundtrack|music video)\b/i.test(title)) {
+    return true;
+  }
+
+  return (
+    /\b(clip|scene|interview|behind the scenes|bts)\b/i.test(title) &&
+    !/\b(video essay|analysis|essay|explained|breakdown)\b/i.test(title)
+  );
+}
+
+function isTrustedVideoEssayChannel(channelTitle) {
+  return /\b(every frame a painting|lessons from the screenplay|nerdwriter|thomas flight|like stories of old|cinemastix|accented cinema|royal ocean film society|broey deschanel|patrick h willems|just write|wisecrack|studio ?binder|now you see it|the take|fandor|movies with mikey|lindsay ellis|cinema cartography)\b/i.test(
+    channelTitle
+  );
+}
+
+function getBaseMovieTitle(title) {
+  return String(title || "")
+    .replace(/\s*\([^)]*\)\s*$/g, "")
+    .split(":")[0]
+    .trim();
+}
+
+function getReliableBaseMovieTitle(title) {
+  const normalizedTitle = normalizeSearchTerm(title);
+  const baseTitle = getBaseMovieTitle(title);
+  const normalizedBaseTitle = normalizeSearchTerm(baseTitle);
+  const baseTokens = normalizedBaseTitle.split(" ").filter(Boolean);
+
+  if (!normalizedBaseTitle || normalizedBaseTitle === normalizedTitle) {
+    return "";
+  }
+
+  return baseTokens.length >= 2 ? baseTitle : "";
+}
+
+function quoteYouTubeQuery(value) {
+  return `"${String(value || "").replace(/"/g, "").trim()}"`;
 }
 
 function createYouTubeEssaySearchUrl(title, year) {

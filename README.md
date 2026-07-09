@@ -60,7 +60,7 @@ Need a movie suggestion? This repository contains a Node.js web app that serves 
 - `GEMINI_API_KEY` - (optional) API key for Gemini; required to enable chat recommendations.
 - `GEMINI_MODEL` - (optional) Gemini model name; defaults to `gemini-2.5-flash`.
 - `TMDB_API_KEY` or `TMDB_ACCESS_TOKEN` - (optional) TMDB credentials for search/posters/provider lookup.
-- `YOUTUBE_API_KEY` - (optional) YouTube Data API v3 key for automatic video-essay results. Without it, the detail view links to a focused YouTube search.
+- `YOUTUBE_API_KEY` - (optional) YouTube Data API v3 key for automatic video-essay embeds. Without it, the video-essay section stays hidden.
 - `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` - (optional) Turso database credentials for account storage.
 - `SESSION_SECRET` - required when Turso account storage is enabled; use a long random string.
 - `AUTH_INVITE_CODE` - (optional) shared code required for registration when set.
