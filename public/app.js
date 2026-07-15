@@ -119,12 +119,12 @@ const fallbackWallPosters = [
 // Core UI state tracks the current chat, selected poster picks, and poster-wall animation settings.
 const conversation = [];
 const selectedMovies = Array(4).fill(null);
-const POSTER_WALL_TARGET_COLUMN_WIDTH = 74;
-const POSTER_WALL_MIN_COLUMNS = 7;
-const POSTER_WALL_MAX_COLUMNS = 48;
-const POSTER_WALL_MIN_ROWS = 10;
-const POSTER_WALL_MAX_ROWS = 22;
-const POSTER_WALL_EXTRA_ROWS = 3;
+const POSTER_WALL_TARGET_COLUMN_WIDTH = 112;
+const POSTER_WALL_MIN_COLUMNS = 6;
+const POSTER_WALL_MAX_COLUMNS = 16;
+const POSTER_WALL_MIN_ROWS = 6;
+const POSTER_WALL_MAX_ROWS = 12;
+const POSTER_WALL_EXTRA_ROWS = 2;
 const POSTER_WALL_BASE_SPEED = 8.5;
 const POSTER_WALL_SPEED_VARIANCE = 4;
 const POSTER_WALL_MAX_FRAME_DELTA = 0.05;
@@ -154,6 +154,7 @@ let posterWallLayoutKey = "";
 let posterWallColumns = [];
 let posterWallAnimationFrame = 0;
 let posterWallLastTimestamp = 0;
+let posterWallIsVisible = !document.hidden;
 let accountMode = "login";
 let accountReturnFocus = accountButton;
 let authState = {
@@ -465,6 +466,7 @@ syncViewFromLocation();
 // Poster wall resize listeners keep the animated background fitted to viewport changes.
 if (posterWall) {
   window.addEventListener("resize", schedulePosterWallRender);
+  document.addEventListener("visibilitychange", handlePosterWallVisibility);
 
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", schedulePosterWallRender);
@@ -1099,12 +1101,30 @@ function clampNumber(value, min, max) {
 
 // Starts the poster-wall animation loop if it is not already running.
 function startPosterWallAnimation() {
-  if (posterWallAnimationFrame || !posterWallColumns.length) {
+  if (
+    posterWallAnimationFrame ||
+    !posterWallColumns.length ||
+    !posterWallIsVisible ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
     return;
   }
 
   posterWallLastTimestamp = performance.now();
   posterWallAnimationFrame = window.requestAnimationFrame(stepPosterWall);
+}
+
+// Avoids spending CPU and GPU time animating a background in a hidden tab.
+function handlePosterWallVisibility() {
+  posterWallIsVisible = !document.hidden;
+
+  if (posterWallIsVisible) {
+    startPosterWallAnimation();
+  } else if (posterWallAnimationFrame) {
+    window.cancelAnimationFrame(posterWallAnimationFrame);
+    posterWallAnimationFrame = 0;
+    posterWallLastTimestamp = 0;
+  }
 }
 
 // Stops the poster-wall animation loop and clears its frame bookkeeping.
@@ -1299,7 +1319,7 @@ function createPosterWallTile(poster, index) {
   const image = document.createElement("img");
   image.alt = "";
   image.decoding = "async";
-  image.loading = "eager";
+  image.loading = "lazy";
   image.fetchPriority = "low";
   image.addEventListener("load", () => {
     image.hidden = false;
