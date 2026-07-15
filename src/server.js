@@ -108,7 +108,6 @@ const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_KEY_LENGTH = 64;
 const TASTE_PROMPT_LIMIT = 12;
 const MOVIE_MEDIA_CACHE_DURATION_MS = 1000 * 60 * 60 * 6;
-const POSTER_WALL_CACHE_DURATION_MS = 1000 * 60 * 60 * 6;
 const YOUTUBE_ESSAY_SEARCH_MAX_RESULTS = 25;
 const YOUTUBE_ESSAY_GOOD_SCORE = 85;
 const YOUTUBE_ESSAY_MIN_SCORE = 60;
@@ -124,7 +123,6 @@ const FEEDBACK_STATUS_VALUES = new Set([
 let dbClient = null;
 let databaseReadyPromise = null;
 const movieMediaCache = new Map();
-let posterWallCache = null;
 
 // TMDB genre ids are kept locally so casual genre searches can become discover requests.
 const TMDB_MOVIE_GENRES = [
@@ -586,37 +584,17 @@ async function handleRelatedMovies(url, res) {
 // Builds the animated poster wall from TMDB discovery results or the local fallback set.
 async function handlePosterWall(res) {
   if (!TMDB_API_KEY && !TMDB_ACCESS_TOKEN) {
-    sendJson(res, 200, { posters: FALLBACK_POSTER_WALL }, {
-      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400"
-    });
-    return;
-  }
-
-  if (
-    posterWallCache &&
-    Date.now() - posterWallCache.createdAt < POSTER_WALL_CACHE_DURATION_MS
-  ) {
-    sendJson(res, 200, { posters: posterWallCache.posters }, {
-      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400"
-    });
+    sendJson(res, 200, { posters: FALLBACK_POSTER_WALL });
     return;
   }
 
   try {
     const posters = await discoverPosterWallMovies();
-    posterWallCache = {
-      createdAt: Date.now(),
-      posters: posters.length ? posters : FALLBACK_POSTER_WALL
-    };
     sendJson(res, 200, {
-      posters: posterWallCache.posters
-    }, {
-      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400"
+      posters: posters.length ? posters : FALLBACK_POSTER_WALL
     });
   } catch (error) {
-    sendJson(res, 200, { posters: FALLBACK_POSTER_WALL }, {
-      "Cache-Control": "public, max-age=300, stale-while-revalidate=86400"
-    });
+    sendJson(res, 200, { posters: FALLBACK_POSTER_WALL });
   }
 }
 
@@ -2584,12 +2562,8 @@ function serveStatic(pathname, res) {
     }
 
     const ext = path.extname(filePath);
-    const isHtml = ext === ".html";
     res.writeHead(200, {
-      "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
-      "Cache-Control": isHtml
-        ? "no-cache"
-        : "public, max-age=3600, stale-while-revalidate=86400"
+      "Content-Type": MIME_TYPES[ext] || "application/octet-stream"
     });
     res.end(content);
   });
@@ -2693,11 +2667,8 @@ function readJsonBody(req) {
 }
 
 // Sends a JSON response with the project's standard content type.
-function sendJson(res, status, payload, headers = {}) {
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    ...headers
-  });
+function sendJson(res, status, payload) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
 }
 

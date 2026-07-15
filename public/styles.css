@@ -99,7 +99,7 @@ body.library-open {
   padding: 12px;
   overflow: hidden;
   opacity: 0.5;
-  filter: saturate(0.88) contrast(0.96) brightness(0.72);
+  filter: saturate(0.88) contrast(0.96) brightness(0.72) blur(1.15px);
   transform: rotate(-1.2deg) scale(1.04);
   pointer-events: none;
 }
@@ -129,15 +129,6 @@ body.library-open {
   gap: var(--poster-wall-gap);
   transform: translate3d(0, var(--wall-offset, 0), 0);
   will-change: transform;
-  contain: layout paint;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .poster-wall-track,
-  .poster-wall-track[data-direction] {
-    transform: none;
-    will-change: auto;
-  }
 }
 
 .poster-wall-track[data-direction="down"] {
